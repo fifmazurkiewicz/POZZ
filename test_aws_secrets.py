@@ -11,8 +11,8 @@ import sys
 # Set environment before importing modules
 os.environ.setdefault("ENVIRONMENT", "prod")
 os.environ.setdefault("AWS_REGION", "eu-central-1")
-os.environ.setdefault("OPENROUTER_SECRET_NAME", "med-sim/openrouter")
-os.environ.setdefault("POSTGRES_SECRET_NAME", "med-sim/postgres")
+os.environ.setdefault("OPENROUTER_SECRET_NAME", "POZZ")
+os.environ.setdefault("POSTGRES_SECRET_NAME", "POZZ")
 
 print("=" * 70)
 print("AWS Secrets Manager Configuration Test")
