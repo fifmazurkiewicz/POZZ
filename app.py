@@ -156,10 +156,24 @@ with tab_sim:
                 try:
                     with st.spinner("Transkrypcja audio..."):
                         transcript = audio_processor.transcribe_audio_file(tmp_path)
-                        if transcript and transcript.strip() and not transcript.lower().startswith("transcription failed"):
+                        # Check if transcript is valid (not an error message)
+                        error_indicators = [
+                            "transcription failed",
+                            "error",
+                            "no api key",
+                            "not installed",
+                            "audio file not found",
+                            "failed",
+                        ]
+                        transcript_lower = transcript.lower() if transcript else ""
+                        is_error = any(indicator in transcript_lower for indicator in error_indicators)
+                        
+                        if transcript and transcript.strip() and not is_error:
                             st.session_state.pending_transcript = transcript.strip()
+                            st.success("Transkrypcja zakończona pomyślnie!")
                         else:
-                            st.error("Nie udało się rozpoznać mowy. Spróbuj ponownie.")
+                            error_msg = transcript if transcript else "Brak odpowiedzi z API transkrypcji"
+                            st.error(f"Nie udało się rozpoznać mowy: {error_msg}")
                 finally:
                     # Clean up temp file
                     if os.path.exists(tmp_path):

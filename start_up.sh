@@ -36,6 +36,13 @@ PID_FILE="app.pid"
 echo "[start_up] Syncing environment with uv..."
 uv sync
 
+# Verify critical packages
+echo "[start_up] Verifying psycopg installation..."
+uv run python -c "import psycopg; print('psycopg OK')" || {
+    echo "[start_up] ERROR: psycopg not found, installing directly..."
+    uv add psycopg[binary]
+}
+
 echo "[start_up] Starting Streamlit app on ${BIND_ADDR}:${PORT}..."
 nohup uv run streamlit run app.py \
   --server.address "$BIND_ADDR" \

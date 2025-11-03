@@ -1,6 +1,9 @@
 import json
+import logging
 import os
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 try:
     from dotenv import load_dotenv  # type: ignore
@@ -35,17 +38,33 @@ def _fetch_secret_from_aws(secret_name: str, region_name: Optional[str]) -> Opti
     the field 'OPENROUTER_API_KEY'.
     """
     if boto3 is None:
+        logger.warning("boto3 is not available - cannot fetch secrets from AWS Secrets Manager")
         return None
 
     region = region_name or os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-central-1"
     try:
         client = boto3.client("secretsmanager", region_name=region)
         response = client.get_secret_value(SecretId=secret_name)
-    except (BotoCoreError, ClientError):
+    except ClientError as e:
+        response = getattr(e, "response", None)  # type: ignore
+        if response and isinstance(response, dict):
+            error_code = response.get("Error", {}).get("Code", "Unknown")
+            if error_code == "ResourceNotFoundException":
+                logger.warning(f"AWS Secret not found: {secret_name} in region {region}")
+            elif error_code == "AccessDeniedException":
+                logger.warning(f"Access denied to AWS Secret: {secret_name} in region {region}")
+            else:
+                logger.warning(f"Error fetching AWS Secret {secret_name} from region {region}: {error_code}")
+        else:
+            logger.warning(f"Error fetching AWS Secret {secret_name} from region {region}: {type(e).__name__}")
+        return None
+    except (BotoCoreError, Exception) as e:
+        logger.warning(f"Error connecting to AWS Secrets Manager (secret={secret_name}, region={region}): {type(e).__name__}")
         return None
 
     secret_str = response.get("SecretString")
     if not secret_str:
+        logger.warning(f"AWS Secret {secret_name} has no SecretString")
         return None
 
     # Try JSON first
@@ -82,6 +101,31 @@ def get_openrouter_api_key() -> Optional[str]:
     return os.getenv("OPENROUTER_API_KEY")
 
 
+def get_openai_api_key() -> Optional[str]:
+    """Return OpenAI API key (optional, for direct Whisper access).
+    
+    Checks OPENAI_API_KEY env var or Secrets Manager (OPENAI_SECRET_NAME).
+    """
+    ensure_local_env_loaded()
+    
+    if get_environment() == "local":
+        return os.getenv("OPENAI_API_KEY")
+    
+    secret_name = os.getenv("OPENAI_SECRET_NAME", "med-sim/openai")
+    region = os.getenv("AWS_REGION")
+    key = _fetch_secret_from_aws(secret_name=secret_name, region_name=region)
+    if key:
+        try:
+            data = json.loads(key)
+            if isinstance(data, dict) and "OPENAI_API_KEY" in data:
+                return str(data["OPENAI_API_KEY"]).strip()
+        except json.JSONDecodeError:
+            pass
+        return key
+    
+    return os.getenv("OPENAI_API_KEY")
+
+
 def get_database_url() -> Optional[str]:
     """Return PostgreSQL connection URL.
 
@@ -91,22 +135,44 @@ def get_database_url() -> Optional[str]:
     """
     ensure_local_env_loaded()
 
-    if get_environment() == "local":
-        return os.getenv("DATABASE_URL")
+    env = get_environment()
+    if env == "local":
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            logger.warning("ENVIRONMENT=local but DATABASE_URL not found in .env or environment variables")
+        return db_url
 
+    # Non-local environment: try Secrets Manager
     secret_name = os.getenv("POSTGRES_SECRET_NAME", "POZZ")
-    region = os.getenv("AWS_REGION")
+    region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+    
+    logger.info(f"Fetching database URL from AWS Secrets Manager: secret={secret_name}, region={region}, environment={env}")
+    
     value = _fetch_secret_from_aws(secret_name=secret_name, region_name=region)
     if value:
         # Try JSON wrapper
         try:
             data = json.loads(value)
             if isinstance(data, dict) and "DATABASE_URL" in data:
+                logger.info("Found DATABASE_URL in JSON secret")
                 return str(data["DATABASE_URL"]).strip()
         except json.JSONDecodeError:
-            pass
-        return value
+            # Not JSON, treat as raw DSN
+            logger.info("Using raw secret value as DATABASE_URL")
+            return value.strip()
+        return value.strip()
 
-    return os.getenv("DATABASE_URL")
+    # Fallback to env var
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        logger.info("Using DATABASE_URL from environment variable")
+        return db_url
+    
+    logger.error(
+        f"DATABASE_URL not found. Environment={env}, "
+        f"SecretName={secret_name}, Region={region}, "
+        f"EnvVar={'set' if os.getenv('DATABASE_URL') else 'not set'}"
+    )
+    return None
 
 

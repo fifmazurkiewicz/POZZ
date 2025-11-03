@@ -12,9 +12,11 @@
    "requests>=2.32.3",
    "python-dotenv>=1.0.1",
    "boto3>=1.35.0",
-   "streamlit-webrtc>=0.47.7",
+  "streamlit-webrtc>=0.47.7",
+  "streamlit-mic-recorder>=0.0.6",
+  "openai>=1.0.0",
   "psycopg[binary]>=3.2.1",
- ]
+]
 
  [project.urls]
  Homepage = "https://example.com"

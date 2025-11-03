@@ -1,3 +1,4 @@
+import os
 import uuid
 from contextlib import contextmanager
 from typing import Generator, List, Optional, Tuple
@@ -27,7 +28,25 @@ def _get_conn() -> psycopg.Connection:
     if _GLOBAL_CONN is None:
         dsn = get_database_url()
         if not dsn:
-            raise RuntimeError("DATABASE_URL not configured. Set in .env (local) or Secrets Manager (non-local).")
+            from .config import get_environment
+            env = get_environment()
+            error_msg = (
+                "DATABASE_URL not configured.\n"
+                f"Environment: {env}\n"
+            )
+            if env == "local":
+                error_msg += "Set DATABASE_URL in .env file or environment variables."
+            else:
+                secret_name = os.getenv("POSTGRES_SECRET_NAME", "POZZ")
+                region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-central-1"
+                error_msg += (
+                    f"Set DATABASE_URL in AWS Secrets Manager.\n"
+                    f"Expected secret name: {secret_name}\n"
+                    f"Region: {region}\n"
+                    f"Or set DATABASE_URL environment variable.\n"
+                    f"Check application logs for detailed error messages."
+                )
+            raise RuntimeError(error_msg)
         dsn = _normalize_dsn(dsn)
         _GLOBAL_CONN = psycopg.connect(dsn, autocommit=True)
     return _GLOBAL_CONN

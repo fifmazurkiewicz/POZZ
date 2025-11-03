@@ -1,7 +1,13 @@
 import requests
 from typing import List, Dict, Optional
+import os
 
-from .config import get_openrouter_api_key
+from .config import get_openrouter_api_key, get_openai_api_key
+
+try:
+    from openai import OpenAI  # type: ignore
+except ImportError:
+    OpenAI = None
 
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -66,45 +72,65 @@ def get_llm_response(
 
 def transcribe_audio(
     file_path: str,
-    model_name: str = "openai/whisper-1",
+    model_name: str = "whisper-1",
     prompt: Optional[str] = None,
     language: Optional[str] = None,
 ) -> str:
-    """Transcribe audio using OpenRouter Whisper-compatible endpoint.
+    """Transcribe audio using OpenAI Whisper.
 
-    Returns text or error string. This is a convenience wrapper; see
-    modules.audio_processor for additional utilities.
+    Tries direct OpenAI API first, then OpenRouter as fallback.
+    Returns text or error string.
     """
+    if OpenAI is None:
+        return "OpenAI library not installed. Run: uv sync"
+
+    # Try direct OpenAI API first (if key available)
+    openai_key = get_openai_api_key()
+    if openai_key:
+        try:
+            client = OpenAI(api_key=openai_key)
+            with open(file_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model=model_name,
+                    file=audio_file,
+                    prompt=prompt,
+                    language=language,
+                )
+                return transcript.text
+        except Exception as exc:
+            error_msg = str(exc)
+            # Return detailed error for OpenAI
+            return f"OpenAI transcription error: {error_msg}"
+
+    # Fallback: Try OpenRouter (may not support audio)
     api_key = get_openrouter_api_key()
     if not api_key:
-        raise ValueError("OpenRouter API key not available.")
-
-    files = {
-        "file": (file_path, open(file_path, "rb"), "application/octet-stream"),
-    }
-    data = {"model": model_name}
-    if prompt:
-        data["prompt"] = prompt
-    if language:
-        data["language"] = language
+        return "Błąd: Brak klucza API. Ustaw OPENAI_API_KEY dla transkrypcji audio (OpenRouter może nie obsługiwać transkrypcji)."
 
     try:
-        resp = requests.post(
-            f"{OPENROUTER_BASE_URL}/audio/transcriptions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
                 "HTTP-Referer": "https://example.com",
                 "X-Title": "med-sim-app",
             },
-            data=data,
-            files=files,
-            timeout=120,
         )
-        resp.raise_for_status()
-        return resp.json().get("text", "")
-    except requests.exceptions.RequestException as exc:
-        return f"Transcription request failed: {exc}"
+        # OpenRouter uses model name with prefix
+        openrouter_model = f"openai/{model_name}" if not model_name.startswith("openai/") else model_name
+        with open(file_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model=openrouter_model,
+                file=audio_file,
+                prompt=prompt,
+                language=language,
+            )
+            return transcript.text
     except Exception as exc:
-        return f"Unexpected transcription error: {exc}"
+        error_msg = str(exc)
+        # Check for 405 error specifically
+        if "405" in error_msg or "Method Not Allowed" in error_msg:
+            return "Błąd 405: OpenRouter nie obsługuje transkrypcji audio. Dodaj OPENAI_API_KEY do .env lub Secrets Manager."
+        return f"Błąd transkrypcji przez OpenRouter: {error_msg}"
 
 

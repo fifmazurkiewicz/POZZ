@@ -103,3 +103,53 @@ def generate_patient_summary_prompt(scenario: str) -> List[Dict[str, str]]:
     ]
 
 
+def generate_interview_summary_prompt(chat_history: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Generate a prompt for summarizing the interview conversation."""
+    system_prompt = (
+        "Jesteś lekarzem tworzącym podsumowanie wywiadu medycznego. "
+        "Przeanalizuj poniższą rozmowę lekarza z pacjentem i stwórz zwięzłe podsumowanie.\n\n"
+        "Podsumowanie powinno zawierać:\n"
+        "- Główny powód wizyty/podejrzenie diagnostyczne\n"
+        "- Kluczowe informacje z wywiadu\n"
+        "- Ważne objawy, czynniki ryzyka, historia medyczna\n\n"
+        "Bądź zwięzły, profesjonalny i skup się na faktach medycznych."
+    )
+    # Format chat history for summary
+    conversation_text = ""
+    for msg in chat_history:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        speaker = "Lekarz" if role == "user" else "Pacjent"
+        conversation_text += f"{speaker}: {content}\n\n"
+    
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Rozmowa:\n\n{conversation_text}"},
+    ]
+
+
+def generate_recommendations_prompt(chat_history: List[Dict[str, str]], summary: str) -> List[Dict[str, str]]:
+    """Generate a prompt for creating medical recommendations based on interview."""
+    system_prompt = (
+        "Jesteś doświadczonym lekarzem rodzinnym. "
+        "Na podstawie podsumowania wywiadu medycznego, stwórz listę zaleceń.\n\n"
+        "Zalecenia powinny zawierać:\n"
+        "- Proponowane badania diagnostyczne (z uzasadnieniem)\n"
+        "- Zalecenia terapeutyczne\n"
+        "- Dalsze kroki w postępowaniu\n"
+        "- Monitorowanie/obserwacja\n\n"
+        "Formatuj jako listę punktowaną. Bądź konkretny i praktyczny."
+    )
+    conversation_text = ""
+    for msg in chat_history:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        speaker = "Lekarz" if role == "user" else "Pacjent"
+        conversation_text += f"{speaker}: {content}\n\n"
+    
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Podsumowanie wywiadu:\n{summary}\n\nRozmowa:\n\n{conversation_text}"},
+    ]
+
+
