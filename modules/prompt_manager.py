@@ -1,0 +1,105 @@
+from typing import List, Dict, Optional
+
+
+def generate_patient_scenario_prompt(keywords: Optional[str] = None) -> List[Dict[str, str]]:
+    """Build a system message that forces Polish-language output for the patient scenario."""
+
+    base_prompt_content = (
+        "Jesteś zaawansowanym generatorem scenariuszy medycznych dla szkoleń w POZ. "
+        "Twoim zadaniem jest stworzenie kompletnego, realistycznego i wewnętrznie spójnego profilu pacjenta. "
+        "Profil musi zawierać subtelne pułapki diagnostyczne. Działasz jak kreator postaci do RPG dla lekarza.\n\n"
+        "Wygeneruj odpowiedź WYŁĄCZNIE po polsku. Użyj formatowania Markdown.\n\n"
+        "Profil musi zawierać następujące sekcje:\n"
+        "- **Dane demograficzne:** Wiek, płeć, zawód, sytuacja życiowa.\n"
+        "- **Powód wizyty:** Jeden główny objaw zgłaszany przez pacjenta.\n"
+        "- **Historia obecnej choroby (HPI):** Początek, charakter, czynniki nasilające/łagodzące.\n"
+        "- **Przeszłość medyczna (PMH):** Choroby przewlekłe, operacje, alergie, leki (nazwy i dawki).\n"
+        "- **Wywiad rodzinny i społeczny:** Choroby w rodzinie, papierosy, alkohol, styl życia.\n"
+        "- **Ukryte informacje:** Kluczowe fakty ujawniane tylko przy celnych pytaniach\n"
+        "  (np. stres, problemy w domu, lęk zdrowotny, niestosowanie zaleceń, wstydliwy objaw). To sekcja kluczowa."
+    )
+
+    if keywords and keywords.strip():
+        keyword_instruction = (
+            f"\n\n**ZADANIE SPECJALNE:** Wygeneruj scenariusz ściśle powiązany z następującymi słowami kluczowymi: \"{keywords}\". "
+            "Słowa te mają być centralnym elementem przypadku. Interpretuj kreatywnie, zachowując realizm kliniczny. "
+            "Zapewnij spójność opowieści i logiczne powiązanie koncepcji."
+        )
+        final_prompt_content = base_prompt_content + keyword_instruction
+    else:
+        random_instruction = (
+            "\n\n**ZADANIE:** Wygeneruj typowy przypadek z codziennej praktyki POZ (np. infekcja, problem w chorobie przewlekłej "
+            "lub nowy niepokojący objaw)."
+        )
+        final_prompt_content = base_prompt_content + random_instruction
+
+    return [{"role": "system", "content": final_prompt_content}]
+
+
+def create_simulation_prompt(
+    role_to_play: str,
+    patient_scenario: str,
+    chat_history: List[Dict[str, str]],
+    question: str,
+) -> List[Dict[str, str]]:
+    """Build a prompt for the live interview simulation; force Polish responses."""
+
+    if role_to_play == "patient":
+        system_prompt = (
+            "Jesteś aktorem odgrywającym pacjenta. NIE jesteś asystentem AI. Odpowiadasz krótko, naturalnie i zgodnie z rolą.\n"
+            "Wszystkie odpowiedzi udzielaj WYŁĄCZNIE po polsku.\n"
+            "Oto Twój tajny scenariusz postaci (lekarz go nie zna). Używaj go do kształtowania odpowiedzi:\n"
+            "---\n"
+            f"{patient_scenario}\n"
+            "---\n"
+            "Poniżej znajduje się dotychczasowa rozmowa z lekarzem.\n\n"
+            "Zadanie: odpowiedz na ostatnie pytanie lekarza ściśle z perspektywy pacjenta. Nie ujawniaj informacji, "
+            "o które nie poproszono wprost. Bądź realistyczny — możesz być zdenerwowany, zdezorientowany lub małomówny."
+        )
+        messages = [{"role": "system", "content": system_prompt}] + chat_history + [
+            {"role": "user", "content": question}
+        ]
+        return messages
+
+    if role_to_play == "doctor":
+        system_prompt = (
+            "Grasz rolę lekarza rodzinnego prowadzącego celowany, sprawny i empatyczny wywiad. Odpowiadaj po polsku."
+        )
+        return [{"role": "system", "content": system_prompt}] + chat_history + [
+            {"role": "user", "content": question}
+        ]
+
+    if role_to_play == "meta":
+        system_prompt = (
+            "Jesteś klinicznym mentorem. Udzielasz krótkich, opartych na dowodach wskazówek na podstawie rozmowy. Odpowiadaj po polsku."
+        )
+        return [{"role": "system", "content": system_prompt}] + chat_history + [
+            {"role": "user", "content": question}
+        ]
+
+    # Default pass-through
+    return chat_history + [{"role": "user", "content": question}]
+
+
+def generate_patient_summary_prompt(scenario: str) -> List[Dict[str, str]]:
+    """Generate a prompt asking LLM to extract summary from patient scenario.
+    
+    Returns format: "Imię Nazwisko, wiek lat — główny objaw"
+    """
+    system_prompt = (
+        "Jesteś asystentem wyciągającym kluczowe informacje ze scenariusza pacjenta. "
+        "Wygeneruj krótkie podsumowanie w formacie:\n"
+        '"Imię Nazwisko, wiek lat — główny objaw"\n\n'
+        "Wyciągnij z podanego scenariusza:\n"
+        "- Imię i nazwisko (jeśli nie ma, użyj 'NN')\n"
+        "- Wiek (jeśli nie ma, użyj '?')\n"
+        "- Główny objaw/powód wizyty (jedno zdanie, maksymalnie 50 znaków)\n\n"
+        "Odpowiedz TYLKO w formacie: \"Imię Nazwisko, wiek lat — główny objaw\"\n"
+        "Bez dodatkowych wyjaśnień, tylko ten format."
+    )
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Scenariusz pacjenta:\n\n{scenario}"},
+    ]
+
+

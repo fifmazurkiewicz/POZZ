@@ -1,0 +1,29 @@
+ [project]
+ name = "med-sim-app"
+ version = "0.1.0"
+ description = "Primary Care Patient Simulator (POZ) - Streamlit + OpenRouter"
+ readme = "README.md"
+ requires-python = ">=3.11"
+ authors = [{ name = "POZZ" }]
+ license = { text = "MIT" }
+
+ dependencies = [
+   "streamlit>=1.36.0",
+   "requests>=2.32.3",
+   "python-dotenv>=1.0.1",
+   "boto3>=1.35.0",
+   "streamlit-webrtc>=0.47.7",
+  "psycopg[binary]>=3.2.1",
+ ]
+
+ [project.urls]
+ Homepage = "https://example.com"
+
+[tool.uv]
+# Use correct key name for dependency resolution strategy
+resolution = "highest"
+
+ [tool.uv.sources]
+ # No extra sources needed
+
+
