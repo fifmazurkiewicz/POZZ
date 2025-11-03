@@ -153,3 +153,86 @@ def generate_recommendations_prompt(chat_history: List[Dict[str, str]], summary:
     ]
 
 
+def generate_treatment_plan_prompt(
+    patient_scenario: str,
+    chat_history: List[Dict[str, str]],
+) -> List[Dict[str, str]]:
+    """Generate a prompt for creating the correct treatment plan (medications, recommendations, tests) based on patient scenario and interview."""
+    system_prompt = (
+        "Jesteś doświadczonym lekarzem rodzinnym tworzącym kompleksowy plan postępowania medycznego.\n\n"
+        "Na podstawie scenariusza pacjenta i całej historii wywiadu, wygeneruj POPRAWNY plan postępowania.\n\n"
+        "Plan powinien zawierać następujące sekcje:\n\n"
+        "**LEKI (jeśli wskazane):**\n"
+        "- Konkretne nazwy leków z dawkami\n"
+        "- Uzasadnienie wyboru\n\n"
+        "**ZALECENIA:**\n"
+        "- Zalecenia dotyczące stylu życia\n"
+        "- Zalecenia dotyczące diety\n"
+        "- Inne zalecenia terapeutyczne\n\n"
+        "**BADANIA:**\n"
+        "- Badania diagnostyczne do wykonania\n"
+        "- Uzasadnienie każdego badania\n\n"
+        "Formatuj odpowiedź jako strukturę z sekcjami. Bądź konkretny, profesjonalny i oparty na najlepszych praktykach medycznych.\n"
+        "Odpowiedz WYŁĄCZNIE po polsku."
+    )
+    
+    conversation_text = ""
+    for msg in chat_history:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        speaker = "Lekarz" if role == "user" else "Pacjent"
+        conversation_text += f"{speaker}: {content}\n\n"
+    
+    return [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": f"Scenariusz pacjenta:\n\n{patient_scenario}\n\n---\n\nHistoria wywiadu:\n\n{conversation_text}",
+        },
+    ]
+
+
+def generate_diagnosis_evaluation_prompt(
+    correct_plan: str,
+    user_response: str,
+    patient_scenario: str,
+    chat_history: List[Dict[str, str]],
+) -> List[Dict[str, str]]:
+    """Generate a prompt for evaluating user's diagnosis and treatment plan against the correct one."""
+    system_prompt = (
+        "Jesteś doświadczonym lekarzem-mentorem oceniającym pracę lekarza.\n\n"
+        "Porównaj odpowiedź z poprawnym planem postępowania i oceń:\n\n"
+        "1. **Czy diagnoza jest prawidłowa?** (Tak/Nie/U częściowo)\n"
+        "2. **Czy leki są odpowiednie?** (Zaznacz co jest dobre, co brakuje, co jest nieprawidłowe)\n"
+        "3. **Czy badania są odpowiednie?** (Co jest dobre, co brakuje, co jest niepotrzebne)\n"
+        "4. **Czy zalecenia są odpowiednie?** (Co jest dobre, co brakuje)\n\n"
+        "Następnie stwórz konstruktywną ocenę:\n"
+        "- Co zostało zrobione dobrze?\n"
+        "- Co można poprawić?\n"
+        "- Jakie kluczowe elementy zostały pominięte?\n"
+        "- Jakie dodatkowe informacje mogą być przydatne?\n\n"
+        "Bądź konstruktywny, profesjonalny i edukacyjny. Odpowiedz WYŁĄCZNIE po polsku."
+    )
+    
+    conversation_text = ""
+    for msg in chat_history:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        speaker = "Lekarz" if role == "user" else "Pacjent"
+        conversation_text += f"{speaker}: {content}\n\n"
+    
+    return [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": (
+                f"Scenariusz pacjenta:\n\n{patient_scenario}\n\n"
+                f"---\n\nHistoria wywiadu:\n\n{conversation_text}\n\n"
+                f"---\n\nPOPRAWNY plan postępowania:\n\n{correct_plan}\n\n"
+                f"---\n\nOdpowiedź lekarza:\n\n{user_response}\n\n"
+                f"---\n\nOceń odpowiedź lekarza w porównaniu z poprawnym planem."
+            ),
+        },
+    ]
+
+

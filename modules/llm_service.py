@@ -1,12 +1,20 @@
+import logging
 import requests
 from typing import List, Dict, Optional
 
-from .config import get_openrouter_api_key, get_openai_api_key
+from .config import get_openrouter_api_key, get_openai_api_key, get_groq_api_key
+
+logger = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI  # type: ignore
 except ImportError:
     OpenAI = None
+
+try:
+    from groq import Groq  # type: ignore
+except ImportError:
+    Groq = None
 
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -75,49 +83,99 @@ def get_llm_response(
 
 def transcribe_audio(
     file_path: str,
-    model_name: str = "whisper-1",
+    model_name: str = "whisper-large-v3",
     prompt: Optional[str] = None,
     language: Optional[str] = None,
 ) -> str:
-    """Transcribe audio using OpenAI Whisper.
+    """Transcribe audio using Groq Whisper Large V3 Turbo.
 
-    Tries direct OpenAI API first, then OpenRouter as fallback.
+    Tries Groq API first, then OpenAI as fallback, then OpenRouter.
     Returns text or error string.
     """
-    if OpenAI is None:
-        return "OpenAI library not installed. Run: uv sync"
+    # Try Groq API first (primary method)
+    if Groq is None:
+        logger.warning("Groq library not installed. Install with: uv add groq")
+    else:
+        groq_key = get_groq_api_key()
+        if groq_key:
+            try:
+                client = Groq(api_key=groq_key)
+                with open(file_path, "rb") as file:
+                    file_content = file.read()
+                    create_kwargs = {
+                        "file": (file_path, file_content),
+                        "model": model_name,
+                        "temperature": 0,
+                        "response_format": "verbose_json",
+                    }
+                    # Add language parameter if provided
+                    # Groq Whisper uses ISO 639-1 codes, "pl" for Polish
+                    if language is not None:
+                        create_kwargs["language"] = language
+                        logger.info(f"Transcribing with language: {language}")
+                    else:
+                        logger.warning("No language specified for transcription - accuracy may be lower")
+                    
+                    # Add prompt hint for Polish language to improve accuracy
+                    # Prompt helps Whisper with context and medical terminology
+                    if language == "pl" or language == "polish":
+                        # Polish language hint - helps Whisper understand context
+                        # Use medical context hint for better accuracy with medical terms
+                        create_kwargs["prompt"] = "Rozmowa medyczna w języku polskim. Lekarz i pacjent rozmawiają po polsku o objawach, diagnozie i leczeniu."
+                        logger.info("Added Polish medical context prompt")
+                    elif prompt is not None:
+                        # Use provided prompt if available
+                        create_kwargs["prompt"] = prompt
+                    
+                    logger.debug(f"Transcription parameters: model={model_name}, language={create_kwargs.get('language')}, has_prompt={'prompt' in create_kwargs}")
+                    transcription = client.audio.transcriptions.create(**create_kwargs)
+                    logger.info(f"Transcription successful, length: {len(transcription.text) if transcription.text else 0}")
+                    return transcription.text
+            except Exception as exc:
+                error_msg = str(exc)
+                # Check for invalid API key error
+                if "401" in error_msg or "invalid_api_key" in error_msg.lower() or "incorrect api key" in error_msg.lower() or "unauthorized" in error_msg.lower():
+                    logger.warning(f"Groq API key error: {error_msg[:100]}")
+                    # Fall through to OpenAI fallback
+                # Check for rate limit
+                elif "429" in error_msg or "rate limit" in error_msg.lower():
+                    logger.warning(f"Groq rate limit: {error_msg[:100]}")
+                    # Fall through to OpenAI fallback
+                else:
+                    logger.warning(f"Groq transcription error: {error_msg[:200]}")
+                    # Fall through to OpenAI fallback
 
-    # Try direct OpenAI API first (if key available)
-    openai_key = get_openai_api_key()
-    if openai_key:
-        try:
-            client = OpenAI(api_key=openai_key)
-            with open(file_path, "rb") as audio_file:
-                create_kwargs = {
-                    "model": model_name,
-                    "file": audio_file,
-                }
-                if prompt is not None:
-                    create_kwargs["prompt"] = prompt
-                if language is not None:
-                    create_kwargs["language"] = language
-                transcript = client.audio.transcriptions.create(**create_kwargs)
-                return transcript.text
-        except Exception as exc:
-            error_msg = str(exc)
-            # Check for invalid API key error
-            if "401" in error_msg or "invalid_api_key" in error_msg.lower() or "incorrect api key" in error_msg.lower():
-                return "Błąd: Nieprawidłowy klucz OpenAI API. Sprawdź OPENAI_API_KEY w .env lub Secrets Manager."
-            # Check for other common errors
-            if "429" in error_msg or "rate limit" in error_msg.lower():
-                return "Błąd: Przekroczono limit zapytań do OpenAI. Spróbuj ponownie za chwilę."
-            # Return detailed error (sanitized)
-            return f"Błąd transkrypcji OpenAI: {error_msg[:200]}"  # Limit message length
+    # Fallback: Try OpenAI API (if key available)
+    if OpenAI is not None:
+        openai_key = get_openai_api_key()
+        if openai_key:
+            try:
+                client = OpenAI(api_key=openai_key)
+                # OpenAI API uses "whisper-1" for their model
+                openai_model = "whisper-1"  # OpenAI only supports whisper-1
+                with open(file_path, "rb") as audio_file:
+                    create_kwargs = {
+                        "model": openai_model,
+                        "file": audio_file,
+                    }
+                    if prompt is not None:
+                        create_kwargs["prompt"] = prompt
+                    if language is not None:
+                        create_kwargs["language"] = language
+                    transcript = client.audio.transcriptions.create(**create_kwargs)
+                    return transcript.text
+            except Exception as exc:
+                error_msg = str(exc)
+                logger.warning(f"OpenAI transcription error: {error_msg[:200]}")
+                # Fall through to final error message
 
-    # Fallback: Try OpenRouter (may not support audio)
+    # Final fallback: Try OpenRouter (may not support audio)
     api_key = get_openrouter_api_key()
     if not api_key:
-        return "Błąd: Brak klucza API. Ustaw OPENAI_API_KEY dla transkrypcji audio (OpenRouter może nie obsługiwać transkrypcji)."
+        return "Błąd: Brak klucza API. Ustaw GROQ_API_KEY dla transkrypcji audio (Groq Whisper Large V3 Turbo)."
+
+    if OpenAI is None:
+        return "Błąd: Brak biblioteki OpenAI/OpenRouter. Ustaw GROQ_API_KEY dla transkrypcji audio."
 
     try:
         client = OpenAI(
@@ -145,7 +203,7 @@ def transcribe_audio(
         error_msg = str(exc)
         # Check for 405 error specifically
         if "405" in error_msg or "Method Not Allowed" in error_msg:
-            return "Błąd 405: OpenRouter nie obsługuje transkrypcji audio. Dodaj OPENAI_API_KEY do .env lub Secrets Manager."
+            return "Błąd 405: OpenRouter nie obsługuje transkrypcji audio. Ustaw GROQ_API_KEY dla transkrypcji."
         return f"Błąd transkrypcji przez OpenRouter: {error_msg}"
 
 

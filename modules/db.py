@@ -68,7 +68,8 @@ def init_schema() -> None:
                 id uuid primary key,
                 created_at timestamptz not null default now(),
                 scenario text not null,
-                summary text
+                summary text,
+                treatment_plan text
             );
             """
         )
@@ -77,16 +78,32 @@ def init_schema() -> None:
             cur.execute("alter table patients add column if not exists summary text")
         except Exception:
             pass  # Column might already exist
+        # Add treatment_plan column if it doesn't exist (for existing DBs)
+        try:
+            cur.execute("alter table patients add column if not exists treatment_plan text")
+        except Exception:
+            pass  # Column might already exist
         cur.execute(
             """
             create table if not exists conversations (
                 id uuid primary key,
                 patient_id uuid not null references patients(id) on delete cascade,
                 created_at timestamptz not null default now(),
-                title text
+                title text,
+                user_treatment_response text,
+                diagnosis_evaluation text
             );
             """
         )
+        # Add new columns if they don't exist (for existing DBs)
+        try:
+            cur.execute("alter table conversations add column if not exists user_treatment_response text")
+        except Exception:
+            pass
+        try:
+            cur.execute("alter table conversations add column if not exists diagnosis_evaluation text")
+        except Exception:
+            pass
         cur.execute(
             """
             create table if not exists messages (
@@ -100,14 +117,23 @@ def init_schema() -> None:
         )
 
 
-def create_patient(scenario: str, summary: Optional[str] = None) -> str:
+def create_patient(scenario: str, summary: Optional[str] = None, treatment_plan: Optional[str] = None) -> str:
+    """Create a new patient record with scenario, summary, and treatment plan."""
     patient_id = str(uuid.uuid4())
     with get_cursor() as cur:
         cur.execute(
-            "insert into patients (id, scenario, summary) values (%s, %s, %s)",
-            (patient_id, scenario, summary),
+            "insert into patients (id, scenario, summary, treatment_plan) values (%s, %s, %s, %s)",
+            (patient_id, scenario, summary, treatment_plan),
         )
     return patient_id
+
+
+def get_patient_treatment_plan(patient_id: str) -> Optional[str]:
+    """Get treatment plan for a patient."""
+    with get_cursor() as cur:
+        cur.execute("select treatment_plan from patients where id = %s", (patient_id,))
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
 
 
 def update_patient_summary(patient_id: str, summary: str) -> None:
@@ -143,6 +169,53 @@ def get_conversation_messages(conversation_id: str) -> List[Tuple[int, str, str,
         )
         rows = cur.fetchall()
     return [(r[0], r[1], r[2], r[3]) for r in rows]
+
+
+def get_conversation_details(conversation_id: str) -> Optional[Tuple[str, str, Optional[str], Optional[str]]]:
+    """Get conversation details including user response and evaluation.
+    
+    Returns: (patient_id, title, user_treatment_response, diagnosis_evaluation) or None
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            "select patient_id, title, user_treatment_response, diagnosis_evaluation from conversations where id = %s",
+            (conversation_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return (row[0], row[1] or "", row[2], row[3])
+    return None
+
+
+def update_conversation_treatment_response(conversation_id: str, user_response: str, evaluation: Optional[str] = None) -> None:
+    """Update conversation with user's treatment response and evaluation."""
+    with get_cursor() as cur:
+        if evaluation:
+            cur.execute(
+                "update conversations set user_treatment_response = %s, diagnosis_evaluation = %s where id = %s",
+                (user_response, evaluation, conversation_id),
+            )
+        else:
+            cur.execute(
+                "update conversations set user_treatment_response = %s where id = %s",
+                (user_response, conversation_id),
+            )
+
+
+def get_patient_by_id(patient_id: str) -> Optional[Tuple[str, str, Optional[str], Optional[str]]]:
+    """Get patient details by ID.
+    
+    Returns: (scenario, summary, treatment_plan, created_at_iso) or None
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            "select scenario, summary, treatment_plan, to_char(created_at, 'YYYY-MM-DD" "HH24:MI:SSOF') from patients where id = %s",
+            (patient_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return (row[0], row[1] or "", row[2], row[3])
+    return None
 
 
 def list_patient_conversations(patient_id: str) -> List[Tuple[str, str]]:

@@ -231,6 +231,32 @@ def get_openai_api_key() -> Optional[str]:
     return os.getenv("OPENAI_API_KEY")
 
 
+def get_groq_api_key() -> Optional[str]:
+    """Return Groq API key for Whisper transcription.
+    
+    Checks GROQ_API_KEY env var or Secrets Manager (GROQ_SECRET_NAME or POZZ).
+    """
+    ensure_local_env_loaded()
+    
+    if get_environment() == "local":
+        key = os.getenv("GROQ_API_KEY")
+        return key.strip() if key else None
+    
+    # Try same secret as OpenRouter (POZZ) for consolidated secrets
+    secret_name = os.getenv("GROQ_SECRET_NAME") or os.getenv("OPENROUTER_SECRET_NAME", "POZZ")
+    region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+    
+    # Try to get JSON first (for multi-field secrets)
+    secret_json = _fetch_secret_json_from_aws(secret_name=secret_name, region_name=region)
+    if secret_json and "GROQ_API_KEY" in secret_json:
+        key = str(secret_json["GROQ_API_KEY"]).strip()
+        logger.info("Successfully retrieved Groq API key from JSON secret")
+        return key
+    
+    # Fallback to env var
+    return os.getenv("GROQ_API_KEY")
+
+
 def get_database_url() -> Optional[str]:
     """Return PostgreSQL connection URL.
 
