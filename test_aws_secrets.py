@@ -57,8 +57,8 @@ print()
 
 # Test Secrets Manager access
 secrets_to_check = [
-    ("OpenRouter API Key", "OPENROUTER_SECRET_NAME", "med-sim/openrouter"),
-    ("PostgreSQL URL", "POSTGRES_SECRET_NAME", "med-sim/postgres"),
+    ("OpenRouter API Key", "OPENROUTER_SECRET_NAME", "POZZ"),
+    ("PostgreSQL URL", "POSTGRES_SECRET_NAME", "POZZ"),
 ]
 
 client = boto3.client("secretsmanager", region_name=region)

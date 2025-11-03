@@ -108,7 +108,7 @@ def get_openrouter_api_key() -> Optional[str]:
         return key
 
     # Non-local: try Secrets Manager first
-    secret_name = os.getenv("OPENROUTER_SECRET_NAME", "med-sim/openrouter")
+    secret_name = os.getenv("OPENROUTER_SECRET_NAME", "POZZ")
     region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-central-1"
     
     logger.info(f"Fetching OpenRouter API key from AWS Secrets Manager: secret={secret_name}, region={region}")
@@ -180,7 +180,7 @@ def get_database_url() -> Optional[str]:
         return db_url
 
     # Non-local environment: try Secrets Manager
-    secret_name = os.getenv("POSTGRES_SECRET_NAME", "med-sim/postgres")
+    secret_name = os.getenv("POSTGRES_SECRET_NAME", "POZZ")
     region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
     
     logger.info(f"Fetching database URL from AWS Secrets Manager: secret={secret_name}, region={region}, environment={env}")

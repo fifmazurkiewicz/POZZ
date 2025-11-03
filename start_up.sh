@@ -15,8 +15,8 @@ export ENVIRONMENT="prod"
 export AWS_REGION="eu-central-1"
 
 # Secrets Manager entries
-export OPENROUTER_SECRET_NAME="med-sim/openrouter"
-export POSTGRES_SECRET_NAME="med-sim/postgres"
+export OPENROUTER_SECRET_NAME="POZZ"
+export POSTGRES_SECRET_NAME="POZZ"
 
 # Network
 export PORT="8501"
@@ -53,7 +53,7 @@ try:
     from botocore.exceptions import ClientError
     
     region = os.getenv('AWS_REGION', 'eu-central-1')
-    secret_name = os.getenv('OPENROUTER_SECRET_NAME', 'med-sim/openrouter')
+    secret_name = os.getenv('OPENROUTER_SECRET_NAME', 'POZZ')
     
     try:
         client = boto3.client('secretsmanager', region_name=region)
@@ -89,7 +89,7 @@ import os
 import sys
 os.environ['ENVIRONMENT'] = 'prod'
 os.environ['AWS_REGION'] = os.getenv('AWS_REGION', 'eu-central-1')
-os.environ['POSTGRES_SECRET_NAME'] = os.getenv('POSTGRES_SECRET_NAME', 'med-sim/postgres')
+os.environ['POSTGRES_SECRET_NAME'] = os.getenv('POSTGRES_SECRET_NAME', 'POZZ')
 
 try:
     from modules.config import get_database_url
