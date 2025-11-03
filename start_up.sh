@@ -1,24 +1,38 @@
 #!/usr/bin/env bash
-
+#
+# POZZ Application Startup Script
+# ================================
+# This script:
+# - Installs/verifies dependencies
+# - Verifies AWS Secrets Manager access
+# - Verifies database connection
+# - Starts Streamlit application
+# - Starts Cloudflare Tunnel for HTTPS access
+#
 # Usage:
 #   chmod +x start_up.sh stop.sh
 #   ./start_up.sh
 #
-# Notes:
-# - Exports production env vars for Lightsail/EC2
-# - Runs Streamlit via uv in background with logs and PID file
+# Requirements:
+# - uv package manager
+# - AWS credentials configured
+# - Cloudflare Tunnel (cloudflared) installed
 
 set -euo pipefail
 
-# ------------ Configuration (edit as needed) ------------
+# ============================================================================
+# Configuration
+# ============================================================================
+
+# Environment
 export ENVIRONMENT="prod"
 export AWS_REGION="eu-central-1"
 
-# Secrets Manager entries
+# AWS Secrets Manager
 export OPENROUTER_SECRET_NAME="POZZ"
 export POSTGRES_SECRET_NAME="POZZ"
 
-# Network
+# Network - Streamlit
 export PORT="8501"
 export BIND_ADDR="0.0.0.0"
 
@@ -30,20 +44,33 @@ LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
 OUT_LOG="$LOG_DIR/app.out.log"
 ERR_LOG="$LOG_DIR/app.err.log"
+TUNNEL_LOG="$LOG_DIR/cloudflared.log"
 PID_FILE="app.pid"
+TUNNEL_PID_FILE="cloudflared.pid"
 
-# ------------ Start application ------------
+# ============================================================================
+# Dependency Installation & Verification
+# ============================================================================
+
+echo "[start_up] ========================================"
+echo "[start_up] Starting POZZ Application"
+echo "[start_up] ========================================"
+echo
+
+# Install/update dependencies
 echo "[start_up] Syncing environment with uv..."
 uv sync
+echo
 
-# Verify critical packages
+# Verify psycopg (PostgreSQL driver)
 echo "[start_up] Verifying psycopg installation..."
 uv run python -c "import psycopg; print('psycopg OK')" || {
     echo "[start_up] ERROR: psycopg not found, installing directly..."
     uv add psycopg[binary]
 }
+echo
 
-# Verify streamlit-mic-recorder installation
+# Verify streamlit-mic-recorder (audio recording)
 echo "[start_up] Verifying streamlit-mic-recorder installation..."
 uv run python -c "from streamlit_mic_recorder import mic_recorder; print('streamlit-mic-recorder OK')" || {
     echo "[start_up] WARNING: streamlit-mic-recorder not found. Audio recording may not work."
@@ -52,8 +79,12 @@ uv run python -c "from streamlit_mic_recorder import mic_recorder; print('stream
         echo "[start_up] ERROR: Failed to install streamlit-mic-recorder"
     }
 }
+echo
 
-# Verify AWS Secrets Manager access
+# ============================================================================
+# AWS Secrets Manager Verification
+# ============================================================================
+
 echo "[start_up] Verifying AWS Secrets Manager access..."
 uv run python -c "
 import os
@@ -91,8 +122,12 @@ except ImportError:
 " || {
     echo "[start_up] WARNING: Could not verify AWS secrets. Continuing anyway..."
 }
+echo
 
-# Verify database connection (if DATABASE_URL can be obtained)
+# ============================================================================
+# Database Connection Verification
+# ============================================================================
+
 echo "[start_up] Verifying database configuration..."
 uv run python -c "
 import os
@@ -123,6 +158,11 @@ except Exception as e:
 " || {
     echo "[start_up] WARNING: Database configuration issue. App may fail to connect."
 }
+echo
+
+# ============================================================================
+# Start Streamlit Application
+# ============================================================================
 
 echo "[start_up] Starting Streamlit app on ${BIND_ADDR}:${PORT}..."
 nohup uv run streamlit run app.py \
@@ -132,6 +172,104 @@ nohup uv run streamlit run app.py \
 
 APP_PID=$!
 echo "$APP_PID" > "$PID_FILE"
-echo "[start_up] App started with PID ${APP_PID}. Logs: $OUT_LOG | $ERR_LOG"
+echo "[start_up] ✓ Streamlit started with PID ${APP_PID}"
+echo "[start_up]   Logs: $OUT_LOG | $ERR_LOG"
+echo
+
+# Wait a moment for Streamlit to start
+sleep 3
+
+# Verify Streamlit is running
+if ps -p "$APP_PID" > /dev/null; then
+    echo "[start_up] ✓ Streamlit is running"
+else
+    echo "[start_up] ✗ WARNING: Streamlit may have failed to start. Check logs: $ERR_LOG"
+fi
+echo
+
+# ============================================================================
+# Start Cloudflare Tunnel (HTTPS)
+# ============================================================================
+
+echo "[start_up] Starting Cloudflare Tunnel for HTTPS access..."
+
+# Check if cloudflared is installed
+if ! command -v cloudflared &> /dev/null; then
+    echo "[start_up] ✗ WARNING: cloudflared not found. Installing..."
+    wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -O /tmp/cloudflared.deb
+    sudo dpkg -i /tmp/cloudflared.deb || {
+        echo "[start_up] ✗ ERROR: Failed to install cloudflared"
+        echo "[start_up]   HTTPS tunnel will not be available"
+        echo "[start_up]   Install manually: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/"
+        exit 1
+    }
+    echo "[start_up] ✓ cloudflared installed"
+fi
+
+# Stop any existing tunnel
+if [ -f "$TUNNEL_PID_FILE" ]; then
+    OLD_TUNNEL_PID=$(cat "$TUNNEL_PID_FILE" 2>/dev/null || true)
+    if [ -n "$OLD_TUNNEL_PID" ] && ps -p "$OLD_TUNNEL_PID" > /dev/null 2>&1; then
+        echo "[start_up] Stopping existing tunnel (PID: $OLD_TUNNEL_PID)..."
+        kill "$OLD_TUNNEL_PID" 2>/dev/null || true
+        sleep 2
+    fi
+fi
+
+# Start Cloudflare Tunnel
+echo "[start_up] Starting Cloudflare Tunnel (quick tunnel mode)..."
+nohup cloudflared tunnel --url "http://localhost:${PORT}" \
+  >> "$TUNNEL_LOG" 2>&1 &
+
+TUNNEL_PID=$!
+echo "$TUNNEL_PID" > "$TUNNEL_PID_FILE"
+echo "[start_up] ✓ Cloudflare Tunnel started with PID ${TUNNEL_PID}"
+echo "[start_up]   Logs: $TUNNEL_LOG"
+echo
+
+# Wait for tunnel to initialize and extract HTTPS URL
+echo "[start_up] Waiting for tunnel to initialize..."
+sleep 5
+
+# Extract HTTPS URL from logs
+HTTPS_URL=$(grep -i "trycloudflare.com" "$TUNNEL_LOG" 2>/dev/null | grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1 || true)
+
+if [ -n "$HTTPS_URL" ]; then
+    echo "[start_up] ========================================"
+    echo "[start_up] ✓ HTTPS TUNNEL ACTIVE"
+    echo "[start_up] ========================================"
+    echo "[start_up] Your application is available at:"
+    echo "[start_up]   $HTTPS_URL"
+    echo "[start_up] ========================================"
+    echo
+    echo "$HTTPS_URL" > "$LOG_DIR/https_url.txt"
+    echo "[start_up] HTTPS URL saved to: $LOG_DIR/https_url.txt"
+else
+    echo "[start_up] ⚠ WARNING: Could not extract HTTPS URL from logs"
+    echo "[start_up]   Check tunnel logs: tail -f $TUNNEL_LOG"
+    echo "[start_up]   Look for lines containing 'trycloudflare.com'"
+fi
+echo
+
+# ============================================================================
+# Summary
+# ============================================================================
+
+echo "[start_up] ========================================"
+echo "[start_up] Startup Complete"
+echo "[start_up] ========================================"
+echo "[start_up] Streamlit PID: $APP_PID"
+echo "[start_up] Cloudflare Tunnel PID: $TUNNEL_PID"
+if [ -n "$HTTPS_URL" ]; then
+    echo "[start_up] HTTPS URL: $HTTPS_URL"
+fi
+echo "[start_up]"
+echo "[start_up] Logs:"
+echo "[start_up]   - Streamlit: $OUT_LOG | $ERR_LOG"
+echo "[start_up]   - Tunnel: $TUNNEL_LOG"
+echo "[start_up]   - HTTPS URL: $LOG_DIR/https_url.txt"
+echo "[start_up]"
+echo "[start_up] To stop: ./stop.sh"
+echo "[start_up] ========================================"
 
 

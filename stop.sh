@@ -1,42 +1,51 @@
 #!/usr/bin/env bash
-
+#
+# POZZ Application Stop Script
+# =============================
+# Stops Streamlit application and Cloudflare Tunnel
+#
 # Usage:
 #   ./stop.sh
-#
-# Stops the background Streamlit process started by start_up.sh
 
 set -euo pipefail
 
+LOG_DIR="logs"
 PID_FILE="app.pid"
+TUNNEL_PID_FILE="cloudflared.pid"
 
-if [[ ! -f "$PID_FILE" ]]; then
-  echo "[stop] PID file not found: $PID_FILE"
-  exit 1
-fi
+echo "[stop] Stopping POZZ Application..."
+echo
 
-APP_PID="$(cat "$PID_FILE")"
-if ps -p "$APP_PID" > /dev/null 2>&1; then
-  echo "[stop] Stopping PID ${APP_PID}..."
-  kill "$APP_PID" || true
-  # Wait up to 10s
-  for i in {1..10}; do
-    if ps -p "$APP_PID" > /dev/null 2>&1; then
-      sleep 1
+# Stop Streamlit
+if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE" 2>/dev/null || true)
+    if [ -n "$PID" ] && ps -p "$PID" > /dev/null 2>&1; then
+        kill "$PID" 2>/dev/null || true
+        echo "[stop] ✓ Stopped Streamlit app (PID: $PID)"
     else
-      break
+        echo "[stop] ⚠ Streamlit process not found (PID: $PID)"
     fi
-  done
-  # Force kill if still alive
-  if ps -p "$APP_PID" > /dev/null 2>&1; then
-    echo "[stop] Forcing kill..."
-    kill -9 "$APP_PID" || true
-  fi
-  echo "[stop] Stopped."
+    rm -f "$PID_FILE"
 else
-  echo "[stop] No running process for PID ${APP_PID}."
+    echo "[stop] ⚠ Streamlit PID file not found. App may not be running."
 fi
 
-rm -f "$PID_FILE"
-echo "[stop] PID file removed."
+# Stop Cloudflare Tunnel
+if [ -f "$TUNNEL_PID_FILE" ]; then
+    TUNNEL_PID=$(cat "$TUNNEL_PID_FILE" 2>/dev/null || true)
+    if [ -n "$TUNNEL_PID" ] && ps -p "$TUNNEL_PID" > /dev/null 2>&1; then
+        kill "$TUNNEL_PID" 2>/dev/null || true
+        echo "[stop] ✓ Stopped Cloudflare Tunnel (PID: $TUNNEL_PID)"
+    else
+        echo "[stop] ⚠ Cloudflare Tunnel process not found (PID: $TUNNEL_PID)"
+    fi
+    rm -f "$TUNNEL_PID_FILE"
+else
+    echo "[stop] ⚠ Cloudflare Tunnel PID file not found."
+fi
 
+# Also kill any remaining cloudflared processes
+pkill -f "cloudflared tunnel" 2>/dev/null && echo "[stop] ✓ Stopped any remaining cloudflared processes" || true
 
+echo
+echo "[stop] Done!"

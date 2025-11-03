@@ -66,6 +66,22 @@ with st.sidebar:
             st.markdown(st.session_state.patient_scenario)
     else:
         st.info("Brak scenariusza pacjenta.")
+    
+    # Show HTTPS info if available
+    st.divider()
+    with st.expander("ℹ️ Informacje o HTTPS", expanded=False):
+        st.caption("Aplikacja działa przez HTTPS")
+        st.caption("Aby sprawdzić adres Cloudflare Tunnel:")
+        st.code("""
+# Na serwerze AWS:
+./check_tunnel_url.sh
+
+# Lub sprawdź logi:
+tail -f /tmp/cloudflared.log
+
+# Lub sprawdź systemd:
+sudo journalctl -u cloudflared -f
+        """)
 
 # --- Tabs ---
 tab_sim, tab_interview, tab_browse, tab_admin = st.tabs(["Symulacja", "Wywiad", "Przeglądanie", "Admin"])
@@ -224,9 +240,6 @@ with tab_sim:
         # Voice input section (only if not in end interview mode)
         if st.session_state.interview_end_mode is None:
             st.caption("Możesz użyć mikrofonu lub wpisać pytanie")
-            
-            # Warn about HTTP/HTTPS requirement
-            st.warning("⚠️ **Nagrywanie audio wymaga HTTPS!** Jeśli aplikacja działa przez HTTP, przycisk nagrywania nie zadziała. Przeglądarki blokują dostęp do mikrofonu na niezabezpieczonych połączeniach HTTP.")
             
             try:
                 from streamlit_mic_recorder import mic_recorder
