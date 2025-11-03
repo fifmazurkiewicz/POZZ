@@ -43,6 +43,16 @@ uv run python -c "import psycopg; print('psycopg OK')" || {
     uv add psycopg[binary]
 }
 
+# Verify streamlit-mic-recorder installation
+echo "[start_up] Verifying streamlit-mic-recorder installation..."
+uv run python -c "from streamlit_mic_recorder import mic_recorder; print('streamlit-mic-recorder OK')" || {
+    echo "[start_up] WARNING: streamlit-mic-recorder not found. Audio recording may not work."
+    echo "[start_up] Attempting to install streamlit-mic-recorder..."
+    uv add streamlit-mic-recorder || {
+        echo "[start_up] ERROR: Failed to install streamlit-mic-recorder"
+    }
+}
+
 # Verify AWS Secrets Manager access
 echo "[start_up] Verifying AWS Secrets Manager access..."
 uv run python -c "

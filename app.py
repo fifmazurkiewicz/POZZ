@@ -224,6 +224,10 @@ with tab_sim:
         # Voice input section (only if not in end interview mode)
         if st.session_state.interview_end_mode is None:
             st.caption("Możesz użyć mikrofonu lub wpisać pytanie")
+            
+            # Warn about HTTP/HTTPS requirement
+            st.warning("⚠️ **Nagrywanie audio wymaga HTTPS!** Jeśli aplikacja działa przez HTTP, przycisk nagrywania nie zadziała. Przeglądarki blokują dostęp do mikrofonu na niezabezpieczonych połączeniach HTTP.")
+            
             try:
                 from streamlit_mic_recorder import mic_recorder
                 
@@ -313,8 +317,18 @@ with tab_sim:
                             # Clean up temp file
                             if os.path.exists(tmp_path):
                                 os.unlink(tmp_path)
-            except ImportError:
-                st.info("📦 Instalacja: `uv sync` (wymaga streamlit-mic-recorder)")
+            except ImportError as e:
+                st.error(f"❌ Biblioteka nagrywania audio nie jest zainstalowana: {e}")
+                st.info("📦 Na serwerze AWS wykonaj: `uv add streamlit-mic-recorder` i zrestartuj aplikację")
+                st.warning("⚠️ **Ważne:** Nagrywanie audio wymaga HTTPS. Upewnij się, że aplikacja działa przez HTTPS (nie HTTP).")
+            except Exception as e:
+                st.error(f"❌ Błąd nagrywania audio: {e}")
+                st.info("💡 **Porady:**")
+                st.markdown("""
+                - Upewnij się, że aplikacja działa przez **HTTPS** (przeglądarki wymagają HTTPS do dostępu do mikrofonu)
+                - Sprawdź, czy przeglądarka pozwala na dostęp do mikrofonu (sprawdź ikonę 🔒 w pasku adresu)
+                - Sprawdź logi aplikacji na serwerze: `tail -f logs/app.err.log`
+                """)
 
         # End interview section - waiting for user response
         if st.session_state.interview_end_mode == "waiting_for_response":
@@ -409,8 +423,18 @@ with tab_sim:
                         finally:
                             if os.path.exists(tmp_path):
                                 os.unlink(tmp_path)
-            except ImportError:
-                pass
+            except ImportError as e:
+                st.error(f"❌ Biblioteka nagrywania audio nie jest zainstalowana: {e}")
+                st.info("📦 Na serwerze AWS wykonaj: `uv add streamlit-mic-recorder` i zrestartuj aplikację")
+                st.warning("⚠️ **Ważne:** Nagrywanie audio wymaga HTTPS. Upewnij się, że aplikacja działa przez HTTPS (nie HTTP).")
+            except Exception as e:
+                st.error(f"❌ Błąd nagrywania audio: {e}")
+                st.info("💡 **Porady:**")
+                st.markdown("""
+                - Upewnij się, że aplikacja działa przez **HTTPS** (przeglądarki wymagają HTTPS do dostępu do mikrofonu)
+                - Sprawdź, czy przeglądarka pozwala na dostęp do mikrofonu (sprawdź ikonę 🔒 w pasku adresu)
+                - Sprawdź logi aplikacji na serwerze: `tail -f logs/app.err.log`
+                """)
             
             col_submit1, col_submit2 = st.columns([1, 5])
             with col_submit1:
