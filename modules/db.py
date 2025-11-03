@@ -37,7 +37,7 @@ def _get_conn() -> psycopg.Connection:
             if env == "local":
                 error_msg += "Set DATABASE_URL in .env file or environment variables."
             else:
-                secret_name = os.getenv("POSTGRES_SECRET_NAME", "POZZ")
+                secret_name = os.getenv("POSTGRES_SECRET_NAME", "med-sim/postgres")
                 region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-central-1"
                 error_msg += (
                     f"Set DATABASE_URL in AWS Secrets Manager.\n"

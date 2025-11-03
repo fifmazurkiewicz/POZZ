@@ -95,21 +95,46 @@ def get_openrouter_api_key() -> Optional[str]:
 
     - local: from .env / env var OPENROUTER_API_KEY
     - non-local: from AWS Secrets Manager (OPENROUTER_SECRET_NAME) or env var
+    
+    Raises:
+        ValueError: If key is not available and environment is non-local
     """
     ensure_local_env_loaded()
 
     if get_environment() == "local":
-        return os.getenv("OPENROUTER_API_KEY")
+        key = os.getenv("OPENROUTER_API_KEY")
+        if not key:
+            logger.warning("ENVIRONMENT=local but OPENROUTER_API_KEY not found in .env or environment variables")
+        return key
 
     # Non-local: try Secrets Manager first
     secret_name = os.getenv("OPENROUTER_SECRET_NAME", "med-sim/openrouter")
-    region = os.getenv("AWS_REGION")
+    region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-central-1"
+    
+    logger.info(f"Fetching OpenRouter API key from AWS Secrets Manager: secret={secret_name}, region={region}")
+    
     key = _fetch_secret_from_aws(secret_name=secret_name, region_name=region)
     if key:
+        logger.info("Successfully retrieved OpenRouter API key from Secrets Manager")
         return key
 
     # Fallback to env var if secret missing
-    return os.getenv("OPENROUTER_API_KEY")
+    key = os.getenv("OPENROUTER_API_KEY")
+    if key:
+        logger.info("Using OpenRouter API key from environment variable")
+        return key
+    
+    # No key found in non-local environment
+    error_msg = (
+        f"OpenRouter API key not available. "
+        f"Environment: {get_environment()}\n"
+        f"Configure .env for local or Secrets Manager for non-local envs.\n"
+        f"Expected secret name: {secret_name}\n"
+        f"Region: {region}\n"
+        f"Or set OPENROUTER_API_KEY environment variable."
+    )
+    logger.error(error_msg)
+    raise ValueError(error_msg)
 
 
 def get_openai_api_key() -> Optional[str]:
@@ -155,7 +180,7 @@ def get_database_url() -> Optional[str]:
         return db_url
 
     # Non-local environment: try Secrets Manager
-    secret_name = os.getenv("POSTGRES_SECRET_NAME", "POZZ")
+    secret_name = os.getenv("POSTGRES_SECRET_NAME", "med-sim/postgres")
     region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
     
     logger.info(f"Fetching database URL from AWS Secrets Manager: secret={secret_name}, region={region}, environment={env}")

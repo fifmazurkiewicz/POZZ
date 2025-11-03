@@ -1,6 +1,5 @@
 import requests
 from typing import List, Dict, Optional
-import os
 
 from .config import get_openrouter_api_key, get_openai_api_key
 
@@ -24,7 +23,11 @@ def get_llm_response(
     Messages must be in OpenAI-compatible format:
     [{"role": "system|user|assistant", "content": "..."}, ...]
     """
-    api_key = get_openrouter_api_key()
+    try:
+        api_key = get_openrouter_api_key()
+    except ValueError as e:
+        # Re-raise with more context if needed
+        raise e
     if not api_key:
         raise ValueError("OpenRouter API key not available. Configure .env for local or Secrets Manager for non-local envs.")
 
@@ -90,12 +93,15 @@ def transcribe_audio(
         try:
             client = OpenAI(api_key=openai_key)
             with open(file_path, "rb") as audio_file:
-                transcript = client.audio.transcriptions.create(
-                    model=model_name,
-                    file=audio_file,
-                    prompt=prompt,
-                    language=language,
-                )
+                create_kwargs = {
+                    "model": model_name,
+                    "file": audio_file,
+                }
+                if prompt is not None:
+                    create_kwargs["prompt"] = prompt
+                if language is not None:
+                    create_kwargs["language"] = language
+                transcript = client.audio.transcriptions.create(**create_kwargs)
                 return transcript.text
         except Exception as exc:
             error_msg = str(exc)
@@ -125,12 +131,15 @@ def transcribe_audio(
         # OpenRouter uses model name with prefix
         openrouter_model = f"openai/{model_name}" if not model_name.startswith("openai/") else model_name
         with open(file_path, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(
-                model=openrouter_model,
-                file=audio_file,
-                prompt=prompt,
-                language=language,
-            )
+            create_kwargs = {
+                "model": openrouter_model,
+                "file": audio_file,
+            }
+            if prompt is not None:
+                create_kwargs["prompt"] = prompt
+            if language is not None:
+                create_kwargs["language"] = language
+            transcript = client.audio.transcriptions.create(**create_kwargs)
             return transcript.text
     except Exception as exc:
         error_msg = str(exc)
