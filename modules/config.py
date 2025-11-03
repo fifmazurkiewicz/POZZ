@@ -28,7 +28,18 @@ def get_environment() -> str:
 def ensure_local_env_loaded() -> None:
     """Load .env for local development."""
     if get_environment() == "local":
-        load_dotenv(override=False)
+        # Try to find .env in current directory or project root
+        env_paths = [".env", os.path.join(os.getcwd(), ".env")]
+        loaded = False
+        for env_path in env_paths:
+            if os.path.exists(env_path):
+                load_dotenv(env_path, override=True)
+                loaded = True
+                logger.debug(f"Loaded .env from: {env_path}")
+                break
+        if not loaded:
+            # Fallback: try without explicit path
+            load_dotenv(override=True)
 
 
 def _fetch_secret_from_aws(secret_name: str, region_name: Optional[str]) -> Optional[str]:
@@ -109,7 +120,8 @@ def get_openai_api_key() -> Optional[str]:
     ensure_local_env_loaded()
     
     if get_environment() == "local":
-        return os.getenv("OPENAI_API_KEY")
+        key = os.getenv("OPENAI_API_KEY")
+        return key.strip() if key else None
     
     secret_name = os.getenv("OPENAI_SECRET_NAME", "med-sim/openai")
     region = os.getenv("AWS_REGION")

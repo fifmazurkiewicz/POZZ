@@ -99,8 +99,14 @@ def transcribe_audio(
                 return transcript.text
         except Exception as exc:
             error_msg = str(exc)
-            # Return detailed error for OpenAI
-            return f"OpenAI transcription error: {error_msg}"
+            # Check for invalid API key error
+            if "401" in error_msg or "invalid_api_key" in error_msg.lower() or "incorrect api key" in error_msg.lower():
+                return "Błąd: Nieprawidłowy klucz OpenAI API. Sprawdź OPENAI_API_KEY w .env lub Secrets Manager."
+            # Check for other common errors
+            if "429" in error_msg or "rate limit" in error_msg.lower():
+                return "Błąd: Przekroczono limit zapytań do OpenAI. Spróbuj ponownie za chwilę."
+            # Return detailed error (sanitized)
+            return f"Błąd transkrypcji OpenAI: {error_msg[:200]}"  # Limit message length
 
     # Fallback: Try OpenRouter (may not support audio)
     api_key = get_openrouter_api_key()
