@@ -251,11 +251,84 @@ def list_conversations_with_patient(limit: int = 50) -> List[Tuple[str, str, str
     return [(r[0], r[1], r[2], r[3]) for r in rows]
 
 
+def count_unprocessed_patients() -> int:
+    """Count patients that don't have any completed conversation (with evaluation)."""
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            select count(distinct p.id)
+            from patients p
+            where not exists (
+                select 1
+                from conversations c
+                where c.patient_id = p.id
+                and c.diagnosis_evaluation is not null
+            )
+            """,
+        )
+        row = cur.fetchone()
+        return row[0] if row else 0
+
+
+def get_unprocessed_patient_id() -> Optional[str]:
+    """Get ID of a patient that doesn't have any completed conversation (with evaluation).
+    
+    Returns the oldest unprocessed patient ID, or None if all are processed.
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            select p.id
+            from patients p
+            where not exists (
+                select 1
+                from conversations c
+                where c.patient_id = p.id
+                and c.diagnosis_evaluation is not null
+            )
+            order by p.created_at asc
+            limit 1
+            """,
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
+def is_patient_processed(patient_id: str) -> bool:
+    """Check if patient has at least one completed conversation (with evaluation)."""
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            select count(*) > 0
+            from conversations
+            where patient_id = %s
+            and diagnosis_evaluation is not null
+            """,
+            (patient_id,),
+        )
+        row = cur.fetchone()
+        return row[0] if row else False
+
+
 def wipe_all_data() -> None:
     """Dangerous: truncate all application tables (cascades, restart identity)."""
     with get_cursor() as cur:
         cur.execute(
             "truncate table messages, conversations, patients restart identity cascade"
+        )
+
+
+def mark_patient_skipped(patient_id: str) -> None:
+    """Mark a patient as processed by creating a conversation with an evaluation.
+
+    This is used to 'skip' a patient from the pool without conducting an interview.
+    """
+    conversation_id = str(uuid.uuid4())
+    with get_cursor() as cur:
+        # Create conversation with evaluation prefilled as SKIPPED
+        cur.execute(
+            "insert into conversations (id, patient_id, title, diagnosis_evaluation) values (%s, %s, %s, %s)",
+            (conversation_id, patient_id, "Skipped", "SKIPPED (pominięty)"),
         )
 
 
