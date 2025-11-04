@@ -146,22 +146,6 @@ with st.sidebar:
             st.markdown(st.session_state.patient_scenario)
     else:
         st.info("Brak scenariusza pacjenta.")
-    
-    # Show HTTPS info if available
-    st.divider()
-    with st.expander("ℹ️ Informacje o HTTPS", expanded=False):
-        st.caption("Aplikacja działa przez HTTPS")
-        st.caption("Aby sprawdzić adres Cloudflare Tunnel:")
-        st.code("""
-# Na serwerze AWS:
-./check_tunnel_url.sh
-
-# Lub sprawdź logi:
-tail -f /tmp/cloudflared.log
-
-# Lub sprawdź systemd:
-sudo journalctl -u cloudflared -f
-        """)
 
 # --- Tabs ---
 tab_sim, tab_interview, tab_browse, tab_admin = st.tabs(["Symulacja", "Wywiad", "Przeglądanie", "Admin"])
@@ -321,26 +305,23 @@ with tab_sim:
         if st.session_state.interview_end_mode is None:
             st.caption("Możesz użyć mikrofonu lub wpisać pytanie")
             
-            # Show microphone permission info
+            # Show microphone permission info - more visible on mobile
+            mic_permission_state = st.empty()
+            
             st.markdown("""
-            <div id="mic-permission-info" style="display: none;" class="mic-permission-banner">
-                <strong>⚠️ Uprawnienia do mikrofonu</strong><br>
-                Jeśli przycisk nagrywania nie działa, kliknij poniżej aby poprosić o uprawnienia:
-                <br>
-                <button onclick="requestMicrophonePermission()">🎤 Poproś o dostęp do mikrofonu</button>
-            </div>
             <script>
-            function requestMicrophonePermission() {
+            // Global function to request microphone permission
+            window.requestMicrophonePermission = function() {
                 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                     navigator.mediaDevices.getUserMedia({ audio: true })
                         .then(function(stream) {
                             stream.getTracks().forEach(track => track.stop());
-                            alert('✅ Uprawnienia do mikrofonu zostały przyznane! Odśwież stronę i spróbuj ponownie.');
-                            document.getElementById('mic-permission-info').style.display = 'none';
+                            alert('✅ Uprawnienia do mikrofonu zostały przyznane! Teraz możesz użyć nagrywania.');
+                            checkMicPermission(); // Update UI
                         })
                         .catch(function(err) {
                             if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                                alert('❌ Uprawnienia zostały odrzucone. Sprawdź ustawienia przeglądarki i zezwól na dostęp do mikrofonu.');
+                                alert('❌ Uprawnienia zostały odrzucone.\\n\\nNa telefonie:\\n1. Sprawdź ustawienia przeglądarki\\n2. Zezwól na dostęp do mikrofonu\\n3. Odśwież stronę');
                             } else {
                                 alert('❌ Błąd: ' + err.message);
                             }
@@ -350,23 +331,115 @@ with tab_sim:
                 }
             }
             
-            // Check permission status and show banner if needed
-            if (navigator.permissions) {
-                navigator.permissions.query({ name: 'microphone' }).then(function(result) {
-                    if (result.state === 'denied') {
-                        document.getElementById('mic-permission-info').style.display = 'block';
-                    }
-                    result.onchange = function() {
-                        if (this.state === 'denied') {
-                            document.getElementById('mic-permission-info').style.display = 'block';
-                        } else {
-                            document.getElementById('mic-permission-info').style.display = 'none';
-                        }
-                    };
-                }).catch(function() {
-                    // Permissions API not fully supported
-                });
+            // Check microphone permission status
+            function checkMicPermission() {
+                if (navigator.permissions) {
+                    navigator.permissions.query({ name: 'microphone' }).then(function(result) {
+                        updatePermissionUI(result.state);
+                        result.onchange = function() {
+                            updatePermissionUI(this.state);
+                        };
+                    }).catch(function() {
+                        // Permissions API not supported, try direct check
+                        checkMicDirectly();
+                    });
+                } else {
+                    checkMicDirectly();
+                }
             }
+            
+            function checkMicDirectly() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(function(stream) {
+                            stream.getTracks().forEach(track => track.stop());
+                            updatePermissionUI('granted');
+                        })
+                        .catch(function(err) {
+                            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                                updatePermissionUI('denied');
+                            } else {
+                                updatePermissionUI('prompt');
+                            }
+                        });
+                }
+            }
+            
+            function updatePermissionUI(state) {
+                const banner = document.getElementById('mic-permission-banner');
+                sessionStorage.setItem('micPermissionState', state);
+                
+                if (state === 'denied' || state === 'prompt') {
+                    if (banner) {
+                        banner.style.display = 'block';
+                        // Scroll to banner on mobile
+                        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                        if (isMobile) {
+                            setTimeout(function() {
+                                banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 300);
+                        }
+                    }
+                } else if (state === 'granted') {
+                    if (banner) banner.style.display = 'none';
+                }
+            }
+            
+            // Check on page load and show banner immediately if needed
+            window.addEventListener('load', function() {
+                // Check immediately
+                checkMicPermission();
+                
+                // Also check after a delay (in case permission prompt appears)
+                setTimeout(function() {
+                    checkMicPermission();
+                }, 2000);
+                
+                // Show banner by default on mobile (after checking)
+                setTimeout(function() {
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    if (isMobile) {
+                        const banner = document.getElementById('mic-permission-banner');
+                        const permissionState = sessionStorage.getItem('micPermissionState');
+                        if (permissionState !== 'granted' && banner) {
+                            banner.style.display = 'block';
+                        }
+                    }
+                }, 1500);
+            });
+            
+            // Also check when user interacts with page (for better mobile support)
+            document.addEventListener('click', function() {
+                setTimeout(checkMicPermission, 500);
+            }, { once: true });
+            </script>
+            """, unsafe_allow_html=True)
+            
+            # Show banner if permission needed - always visible on mobile initially
+            st.markdown("""
+            <div id="mic-permission-banner" style="background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%); color: white; padding: 20px; border-radius: 10px; margin: 15px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 2px solid rgba(255,255,255,0.3);">
+                <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px; text-align: center;">🎤 Uprawnienia do mikrofonu</div>
+                <div style="margin-bottom: 16px; font-size: 15px; line-height: 1.5; text-align: center;">
+                    Aby nagrywać głos, aplikacja potrzebuje dostępu do mikrofonu.<br>
+                    <strong>Kliknij przycisk poniżej, aby przyznać uprawnienia.</strong>
+                </div>
+                <button onclick="window.requestMicrophonePermission()" style="background: white; color: #ff6b6b; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 18px; width: 100%; box-shadow: 0 3px 8px rgba(0,0,0,0.25); transition: transform 0.2s; display: block; margin: 0 auto;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    🎤 Przyznaj dostęp do mikrofonu
+                </button>
+                <div style="margin-top: 12px; font-size: 13px; opacity: 0.95; text-align: center; line-height: 1.4;">
+                    📱 <strong>Na telefonie:</strong><br>
+                    Jeśli przycisk nie działa, sprawdź:<br>
+                    Ustawienia → Aplikacje → [Twoja przeglądarka] → Uprawnienia → Mikrofon
+                </div>
+            </div>
+            <script>
+            // Hide banner if permission already granted
+            (function() {
+                const savedState = sessionStorage.getItem('micPermissionState');
+                if (savedState === 'granted') {
+                    document.getElementById('mic-permission-banner').style.display = 'none';
+                }
+            })();
             </script>
             """, unsafe_allow_html=True)
             
