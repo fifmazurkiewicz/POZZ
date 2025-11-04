@@ -4,7 +4,7 @@ import os
 import hashlib
 import random
 import re
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 
 from modules import llm_service, prompt_manager
 from modules import db
@@ -230,28 +230,43 @@ def ensure_patient_pool(target_count: int = 20):
 
 
 def parse_patient_card_from_scenario(scenario: str) -> Optional[Dict[str, str]]:
-    """Parse 'Karta pacjenta' section from scenario text.
-    
-    Looks for section like:
-    - **Karta pacjenta (wymagana):**
-    - Imię i nazwisko: Anna Kowalska
-    - Wiek: 48 lat
-    - Historia w punkcie: Tak
-    etc.
-    
-    Returns dict with keys: name, age, has_history_here, chronic_diseases, operations, allergies, family_history
-    or None if section not found.
+    """Parse 'Karta pacjenta' section from scenario text, robust to Markdown and bullets.
+
+    Accepts both plain and markdown/bulleted formats and returns a dict with:
+    name, age, has_history_here, chronic_diseases, operations, allergies, family_history.
     """
-    # Find "Karta pacjenta" section
-    card_pattern = r"(?i)(?:karta pacjenta|karta pacjenta \(wymagana\))[:\-]?\s*\n"
-    match = re.search(card_pattern, scenario)
-    if not match:
+    # Find the start of the card section (case-insensitive)
+    header_match = re.search(r"karta\s+pacjenta\s*:?(?:\s*\(wymagana\))?\s*$", scenario, re.IGNORECASE | re.MULTILINE)
+    if not header_match:
         return None
-    
-    # Extract everything after "Karta pacjenta"
-    card_section = scenario[match.end():]
-    
-    result = {
+
+    # Take lines after the header
+    after = scenario[header_match.end():]
+    lines = after.splitlines()
+
+    # Helper to normalize a line (remove bullets/markdown and trim)
+    def normalize_line(line: str) -> str:
+        # Remove leading bullets and markdown markers
+        line = re.sub(r"^[\s>*\-•\u2022]*", "", line)  # bullets and spaces
+        line = line.strip()
+        # Remove bold markers if present
+        line = line.replace("**", "").replace("*", "")
+        return line
+
+    # Map of Polish labels to internal keys
+    field_map = {
+        "imię i nazwisko": "name",
+        "imie i nazwisko": "name",
+        "wiek": "age",
+        "historia w punkcie": "has_history_here",
+        "choroby przewlekłe": "chronic_diseases",
+        "choroby przewlekle": "chronic_diseases",
+        "operacje": "operations",
+        "alergie": "allergies",
+        "wywiad rodzinny": "family_history",
+    }
+
+    result: Dict[str, Any] = {
         "name": "",
         "age": "",
         "has_history_here": None,
@@ -260,34 +275,36 @@ def parse_patient_card_from_scenario(scenario: str) -> Optional[Dict[str, str]]:
         "allergies": "",
         "family_history": "",
     }
-    
-    # Parse each field
-    patterns = {
-        "name": r"(?:imię i nazwisko|imie i nazwisko)[:\-]\s*([^\n]+)",
-        "age": r"wiek[:\-]\s*([^\n]+)",
-        "has_history_here": r"historia w punkcie[:\-]\s*([^\n]+)",
-        "chronic_diseases": r"choroby przewlekłe[:\-]\s*([^\n]+)",
-        "operations": r"operacje[:\-]\s*([^\n]+)",
-        "allergies": r"alergie[:\-]\s*([^\n]+)",
-        "family_history": r"wywiad rodzinny[:\-]\s*([^\n]+)",
-    }
-    
-    for key, pattern in patterns.items():
-        match_field = re.search(pattern, card_section, re.IGNORECASE)
-        if match_field:
-            value = match_field.group(1).strip()
-            if key == "has_history_here":
-                # Convert "Tak"/"Nie" to boolean
-                if "tak" in value.lower():
-                    result["has_history_here"] = True
-                elif "nie" in value.lower():
-                    result["has_history_here"] = False
-            else:
-                result[key] = value
-    
-    # Return only if we found at least name and age
-    if result["name"] or result["age"]:
-        return result
+
+    # Parse until we hit an empty line followed by a non-indented section or end
+    for raw_line in lines:
+        line = normalize_line(raw_line)
+        if not line:
+            # likely end of card block; continue to see if next lines are still fields
+            continue
+        # Split on the first colon
+        if ":" not in line:
+            # If we hit a non key:value line after we've started collecting, we can stop
+            # but being safe, just skip
+            continue
+        label, value = line.split(":", 1)
+        label = label.strip().lower()
+        value = value.strip()
+        key = field_map.get(label)
+        if not key:
+            continue
+        if key == "has_history_here":
+            low = value.lower()
+            if "tak" in low:
+                result["has_history_here"] = True
+            elif "nie" in low:
+                result["has_history_here"] = False
+        else:
+            result[key] = value
+
+    # Validate: at least name or age must be present to accept card
+    if (result["name"] or result["age"]) and result["has_history_here"] is not None:
+        return result  # type: ignore[return-value]
     return None
 
 
