@@ -229,10 +229,23 @@ echo
 
 # Wait for tunnel to initialize and extract HTTPS URL
 echo "[start_up] Waiting for tunnel to initialize..."
-sleep 5
+sleep 8
+
+# Verify Streamlit is responding before starting tunnel
+if ! curl -s http://localhost:${PORT} > /dev/null 2>&1; then
+    echo "[start_up] ⚠ WARNING: Streamlit is not responding on port ${PORT}"
+    echo "[start_up]   Tunnel may not work correctly. Check Streamlit logs: $ERR_LOG"
+fi
 
 # Extract HTTPS URL from logs
 HTTPS_URL=$(grep -i "trycloudflare.com" "$TUNNEL_LOG" 2>/dev/null | grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1 || true)
+
+# If still no URL, wait a bit more and check again
+if [ -z "$HTTPS_URL" ]; then
+    echo "[start_up] Waiting additional 5 seconds for tunnel URL..."
+    sleep 5
+    HTTPS_URL=$(grep -i "trycloudflare.com" "$TUNNEL_LOG" 2>/dev/null | grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1 || true)
+fi
 
 if [ -n "$HTTPS_URL" ]; then
     echo "[start_up] ========================================"
