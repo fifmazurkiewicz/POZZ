@@ -9,7 +9,33 @@ from modules import audio_processor
 
 
 # --- Page config ---
-st.set_page_config(page_title="Symulator Pacjenta POZ", layout="wide")
+st.set_page_config(
+    page_title="Symulator Pacjenta POZ",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': "Symulator Pacjenta POZ - Aplikacja treningowa dla lekarzy"
+    }
+)
+
+# Add mobile-friendly viewport meta tag
+st.markdown("""
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+    /* Mobile-friendly styles */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding: 1rem;
+        }
+        .stButton > button {
+            width: 100%;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🩺 Symulator Pacjenta POZ")
 
 # --- Session state initialization ---
@@ -244,14 +270,16 @@ with tab_sim:
             try:
                 from streamlit_mic_recorder import mic_recorder
                 
-                col_mic1, col_mic2, col_mic3 = st.columns([1, 1, 4])
+                # Mobile-friendly microphone button
+                col_mic1, col_mic2, col_mic3 = st.columns([1, 2, 1])
                 with col_mic2:
                     audio = mic_recorder(
-                        start_prompt="🎤 Nagraj pytanie",
-                        stop_prompt="⏹ Zatrzymaj",
+                        start_prompt="🎤 Nagraj",
+                        stop_prompt="⏹ Stop",
                         just_once=False,
-                        use_container_width=False,
+                        use_container_width=True,
                         format="wav",
+                        key="mic_recorder_main",
                     )
                 
                 if audio and audio.get("bytes"):
@@ -340,6 +368,7 @@ with tab_sim:
                 st.markdown("""
                 - Upewnij się, że aplikacja działa przez **HTTPS** (przeglądarki wymagają HTTPS do dostępu do mikrofonu)
                 - Sprawdź, czy przeglądarka pozwala na dostęp do mikrofonu (sprawdź ikonę 🔒 w pasku adresu)
+                - **Na telefonie:** Upewnij się, że przeglądarka ma uprawnienia do mikrofonu w ustawieniach telefonu
                 - Sprawdź logi aplikacji na serwerze: `tail -f logs/app.err.log`
                 """)
 
@@ -372,11 +401,12 @@ with tab_sim:
                 col_voice1, col_voice2 = st.columns([1, 5])
                 with col_voice1:
                     voice_audio = mic_recorder(
-                        start_prompt="🎤 Nagraj odpowiedź",
-                        stop_prompt="⏹ Zatrzymaj",
+                        start_prompt="🎤 Nagraj",
+                        stop_prompt="⏹ Stop",
                         just_once=False,
                         use_container_width=True,
                         format="wav",
+                        key="mic_recorder_end_interview",
                     )
                 
                 if voice_audio and voice_audio.get("bytes"):
@@ -446,6 +476,7 @@ with tab_sim:
                 st.markdown("""
                 - Upewnij się, że aplikacja działa przez **HTTPS** (przeglądarki wymagają HTTPS do dostępu do mikrofonu)
                 - Sprawdź, czy przeglądarka pozwala na dostęp do mikrofonu (sprawdź ikonę 🔒 w pasku adresu)
+                - **Na telefonie:** Upewnij się, że przeglądarka ma uprawnienia do mikrofonu w ustawieniach telefonu
                 - Sprawdź logi aplikacji na serwerze: `tail -f logs/app.err.log`
                 """)
             
