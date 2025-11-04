@@ -20,7 +20,7 @@ st.set_page_config(
     }
 )
 
-# Add mobile-friendly viewport meta tag
+# Add mobile-friendly viewport meta tag and microphone permission request
 st.markdown("""
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
@@ -33,7 +33,61 @@ st.markdown("""
             width: 100%;
         }
     }
+    .mic-permission-banner {
+        background-color: #ff9800;
+        color: white;
+        padding: 12px;
+        border-radius: 4px;
+        margin: 10px 0;
+        text-align: center;
+    }
+    .mic-permission-banner button {
+        background-color: white;
+        color: #ff9800;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-top: 8px;
+        font-weight: bold;
+    }
 </style>
+<script>
+// Request microphone permissions on page load
+(function() {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        // Check current permission status
+        navigator.permissions.query({ name: 'microphone' }).then(function(result) {
+            if (result.state === 'prompt') {
+                // Permission not yet requested, request it
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(function(stream) {
+                        // Permission granted, stop the stream
+                        stream.getTracks().forEach(track => track.stop());
+                        console.log('Microphone permission granted');
+                    })
+                    .catch(function(err) {
+                        console.log('Microphone permission denied or error:', err);
+                    });
+            } else if (result.state === 'denied') {
+                // Permission was denied, show a message
+                console.log('Microphone permission was denied');
+                // You can show a banner here if needed
+            }
+        }).catch(function(err) {
+            // Permissions API not supported, try direct request
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(function(stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    console.log('Microphone permission granted');
+                })
+                .catch(function(err) {
+                    console.log('Microphone permission error:', err);
+                });
+        });
+    }
+})();
+</script>
 """, unsafe_allow_html=True)
 
 st.title("🩺 Symulator Pacjenta POZ")
@@ -266,6 +320,55 @@ with tab_sim:
         # Voice input section (only if not in end interview mode)
         if st.session_state.interview_end_mode is None:
             st.caption("Możesz użyć mikrofonu lub wpisać pytanie")
+            
+            # Show microphone permission info
+            st.markdown("""
+            <div id="mic-permission-info" style="display: none;" class="mic-permission-banner">
+                <strong>⚠️ Uprawnienia do mikrofonu</strong><br>
+                Jeśli przycisk nagrywania nie działa, kliknij poniżej aby poprosić o uprawnienia:
+                <br>
+                <button onclick="requestMicrophonePermission()">🎤 Poproś o dostęp do mikrofonu</button>
+            </div>
+            <script>
+            function requestMicrophonePermission() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(function(stream) {
+                            stream.getTracks().forEach(track => track.stop());
+                            alert('✅ Uprawnienia do mikrofonu zostały przyznane! Odśwież stronę i spróbuj ponownie.');
+                            document.getElementById('mic-permission-info').style.display = 'none';
+                        })
+                        .catch(function(err) {
+                            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                                alert('❌ Uprawnienia zostały odrzucone. Sprawdź ustawienia przeglądarki i zezwól na dostęp do mikrofonu.');
+                            } else {
+                                alert('❌ Błąd: ' + err.message);
+                            }
+                        });
+                } else {
+                    alert('❌ Twoja przeglądarka nie obsługuje dostępu do mikrofonu.');
+                }
+            }
+            
+            // Check permission status and show banner if needed
+            if (navigator.permissions) {
+                navigator.permissions.query({ name: 'microphone' }).then(function(result) {
+                    if (result.state === 'denied') {
+                        document.getElementById('mic-permission-info').style.display = 'block';
+                    }
+                    result.onchange = function() {
+                        if (this.state === 'denied') {
+                            document.getElementById('mic-permission-info').style.display = 'block';
+                        } else {
+                            document.getElementById('mic-permission-info').style.display = 'none';
+                        }
+                    };
+                }).catch(function() {
+                    // Permissions API not fully supported
+                });
+            }
+            </script>
+            """, unsafe_allow_html=True)
             
             try:
                 from streamlit_mic_recorder import mic_recorder
