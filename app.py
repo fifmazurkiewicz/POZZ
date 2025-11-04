@@ -236,12 +236,27 @@ def parse_patient_card_from_scenario(scenario: str) -> Optional[Dict[str, str]]:
     name, age, has_history_here, chronic_diseases, operations, allergies, family_history.
     """
     # Find the start of the card section (case-insensitive)
-    header_match = re.search(r"karta\s+pacjenta\s*:?(?:\s*\(wymagana\))?\s*$", scenario, re.IGNORECASE | re.MULTILINE)
-    if not header_match:
-        return None
+    header_match = re.search(r"karta\s+pacjenta\s*:?(?:\s*\(wymagana\))?\s*", scenario, re.IGNORECASE)
+    if header_match:
+        start_idx = header_match.end()
+    else:
+        # Fallback: very tolerant search (no regex anchors)
+        low = scenario.lower()
+        idx = low.find("karta pacjenta")
+        if idx == -1:
+            return None
+        # Move to end of that line if present
+        line_end = scenario.find("\n", idx)
+        start_idx = (line_end + 1) if line_end != -1 else idx
 
-    # Take lines after the header
-    after = scenario[header_match.end():]
+    # Take a reasonable window after header to parse (to avoid picking later sections)
+    after = scenario[start_idx:start_idx + 2000]
+    # Truncate if app footer marker present
+    for marker in ["\n🩺", "\nSymulator", "\nSłowa kluczowe", "\nSlowa kluczowe"]:
+        pos = after.find(marker)
+        if pos != -1:
+            after = after[:pos]
+            break
     lines = after.splitlines()
 
     # Helper to normalize a line (remove bullets/markdown and trim)
