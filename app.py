@@ -511,7 +511,10 @@ with tab_sim:
         if st.session_state.chat_history:
             for message in st.session_state.chat_history:
                 role = message.get("role", "assistant")
-                speaker = "Lekarz" if role == "user" else "Pacjent"
+                if st.session_state.current_mode == "meta_ask":
+                    speaker = "Lekarz" if role == "user" else "AI"
+                else:
+                    speaker = "Lekarz" if role == "user" else "Pacjent"
                 with st.chat_message("user" if role == "user" else "assistant"):
                     st.markdown(f"**{speaker}:** {message.get('content', '')}")
         
