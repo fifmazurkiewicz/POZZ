@@ -1,23 +1,72 @@
 from typing import List, Dict, Optional
 
 
-def generate_patient_scenario_prompt(keywords: Optional[str] = None) -> List[Dict[str, str]]:
-    """Build a system message that forces Polish-language output for the patient scenario."""
+def generate_patient_scenario_prompt(
+    keywords: Optional[str] = None,
+    first_time_missing_basics: bool = False,
+) -> List[Dict[str, str]]:
+    """Build a system message that forces Polish-language output for the patient scenario.
+
+    If first_time_missing_basics is True, the prompt will instruct the model to
+    generate a first-time patient at the point of care with missing baseline data
+    (chronic diseases, operations, allergies, family history), explicitly marked
+    as "nieznane/nieudokumentowane – do zebrania podczas wywiadu".
+    """
 
     base_prompt_content = (
         "Jesteś zaawansowanym generatorem scenariuszy medycznych dla szkoleń w POZ. "
         "Twoim zadaniem jest stworzenie kompletnego, realistycznego i wewnętrznie spójnego profilu pacjenta. "
         "Profil musi zawierać subtelne pułapki diagnostyczne. Działasz jak kreator postaci do RPG dla lekarza.\n\n"
         "Wygeneruj odpowiedź WYŁĄCZNIE po polsku. Użyj formatowania Markdown.\n\n"
+        "**WAŻNE - RÓŻNORODNOŚĆ DANYCH:**\n"
+        "ZAWSZE używaj RÓŻNYCH, losowych polskich imion i nazwisk dla każdego pacjenta. "
+        "Używaj szerokiej gamy popularnych i mniej popularnych polskich imion (np. Anna, Piotr, Maria, Tomasz, Katarzyna, "
+        "Aleksander, Joanna, Michał, Agata, Łukasz, Ewa, Marcin, Magdalena, Paweł, Natalia, Krzysztof, itd.). "
+        "Używaj różnych polskich nazwisk (np. Kowalski, Nowak, Wiśniewski, Wójcik, Kowalczyk, Mazur, Krawczyk, Kaczmarek, itd.). "
+        "Wiek pacjenta MUSI być różnorodny - losuj z różnych grup wiekowych (18-95 lat), unikaj powtarzania tych samych wartości. "
+        "NIGDY nie używaj tych samych kombinacji imię-nazwisko-wiek w kolejnych scenariuszach.\n\n"
         "Profil musi zawierać następujące sekcje:\n"
         "- **Dane demograficzne:** Wiek, płeć, zawód, sytuacja życiowa.\n"
         "- **Powód wizyty:** Jeden główny objaw zgłaszany przez pacjenta.\n"
         "- **Historia obecnej choroby (HPI):** Początek, charakter, czynniki nasilające/łagodzące.\n"
-        "- **Przeszłość medyczna (PMH):** Choroby przewlekłe, operacje, alergie, leki (nazwy i dawki).\n"
-        "- **Wywiad rodzinny i społeczny:** Choroby w rodzinie, papierosy, alkohol, styl życia.\n"
-        "- **Ukryte informacje:** Kluczowe fakty ujawniane tylko przy celnych pytaniach\n"
-        "  (np. stres, problemy w domu, lęk zdrowotny, niestosowanie zaleceń, wstydliwy objaw). To sekcja kluczowa."
     )
+    if not first_time_missing_basics:
+        base_prompt_content += (
+            "- **Przeszłość medyczna (PMH):** Choroby przewlekłe, operacje, alergie, leki (nazwy i dawki).\n"
+            "- **Wywiad rodzinny i społeczny:** Choroby w rodzinie, papierosy, alkohol, styl życia.\n"
+        )
+    else:
+        base_prompt_content += (
+            "- **Przeszłość medyczna (PMH):** \n"
+            "  - Choroby przewlekłe: nieznane – do zebrania podczas wywiadu\n"
+            "  - Operacje: nieznane – do zebrania podczas wywiadu\n"
+            "  - Alergie: nieznane – do zebrania podczas wywiadu\n"
+            "  - Leki: nieznane – do zebrania podczas wywiadu\n"
+            "- **Wywiad rodzinny i społeczny:** w znacznej części nieudokumentowany – do zebrania podczas wywiadu.\n"
+        )
+    base_prompt_content += (
+        "- **Ukryte informacje:** Kluczowe fakty ujawniane tylko przy celnych pytaniach\n"
+        "  (np. stres, problemy w domu, lęk zdrowotny, niestosowanie zaleceń, wstydliwy objaw). To sekcja kluczowa.\n\n"
+        "- **Karta pacjenta (wymagana):**\n"
+        "  ZAWSZE dołącz sekcję 'Karta pacjenta' na końcu scenariusza, w formie listy pozycji.\n"
+        "  - Imię i nazwisko: <wartość> - UŻYJ RÓŻNEGO, losowego polskiego imienia i nazwiska (nie powtarzaj poprzednich)\n"
+        "  - Wiek: <wartość> - UŻYJ RÓŻNEGO wieku (losuj z zakresu 18-95 lat, unikaj powtórzeń)\n"
+        "  - Historia w punkcie: <Tak/Nie>\n"
+        "  - Choroby przewlekłe: <wartość>\n"
+        "  - Operacje: <wartość>\n"
+        "  - Alergie: <wartość>\n"
+        "  - Wywiad rodzinny: <wartość>\n\n"
+        "  Jeśli pacjent jest PIERWSZY RAZ w punkcie (brak historii), ustaw: 'Historia w punkcie: Nie' i w tej sekcji podaj TYLKO\n"
+        "  Imię i nazwisko oraz Wiek (pozostałe pozycje w tej sekcji pomiń — nie wpisuj 'brak danych').\n"
+        "  Jeśli pacjent ma historię (drugi lub więcej raz), uzupełnij WSZYSTKIE powyższe pozycje konkretnymi danymi spójnymi z opisem."
+    )
+
+    if first_time_missing_basics:
+        base_prompt_content += (
+            "\n\n**STATUS PACJENTA:** Pacjent jest pierwszorazowy w tym punkcie (brak historii w dokumentacji). "
+            "W sekcjach wymagających danych bazowych zaznacz braki wprost jako nieznane/nieudokumentowane. "
+            "Pacjent nie podaje tych informacji spontanicznie – ujawnia je tylko po celnych pytaniach lekarza."
+        )
 
     if keywords and keywords.strip():
         keyword_instruction = (
@@ -103,6 +152,60 @@ def generate_patient_summary_prompt(scenario: str) -> List[Dict[str, str]]:
     ]
 
 
+def generate_patient_card_extract_prompt(scenario: str, must_fill: bool = False) -> List[Dict[str, str]]:
+    """Ask LLM to extract basic patient card info in strict JSON.
+
+    Expected keys: name, age, chronic_diseases, operations, allergies, family_history.
+    If must_fill is True (pacjent ma historię), wypełnij WSZYSTKIE pola realistycznymi
+    danymi spójnymi ze scenariuszem (nie zostawiaj pustych). Gdy brak w tekście,
+    uzupełnij najbardziej prawdopodobnymi informacjami, zachowując realizm kliniczny.
+    """
+    base = (
+        "Jesteś ekstraktorem danych medycznych. Z poniższego scenariusza pacjenta wyodrębnij "
+        "pola do karty pacjenta i ZWRÓĆ WYŁĄCZNIE poprawny JSON (bez komentarzy, bez markdown).\n\n"
+        "Wynikowy JSON ma mieć dokładnie klucze:\n"
+        "name (string), age (string), chronic_diseases (string), operations (string), allergies (string), family_history (string).\n\n"
+    )
+    if must_fill:
+        base += (
+            "Pacjent ma historię w punkcie — wszystkie pola MUSZĄ być uzupełnione KONKRETNYMI danymi z tekstu scenariusza. "
+            "Wyciągnij WSZYSTKIE dane z tekstu:\n"
+            "- name: pełne imię i nazwisko (jeśli nie ma, wywnioskuj z kontekstu np. 'Jan Kowalski')\n"
+            "- age: konkretny wiek (np. '45 lat', nie '?')\n"
+            "- chronic_diseases: konkretne choroby (np. 'nadciśnienie tętnicze, cukrzyca typu 2' lub 'brak')\n"
+            "- operations: konkretne operacje (np. 'appendektomia 2010' lub 'brak')\n"
+            "- allergies: konkretne alergie (np. 'penicylina' lub 'brak')\n"
+            "- family_history: konkretny wywiad (np. 'ojciec zawał w wieku 60 lat' lub 'brak istotnych obciążeń')\n\n"
+            "ZABRONIONE: placeholdery typu 'dane dostępne w dokumentacji', '?', 'Pacjent znany'. "
+            "Zawsze konkretne wartości lub 'brak'/'nie zgłasza' jeśli rzeczywiście nie ma danych.\n"
+        )
+    else:
+        base += "Jeśli czegoś nie ma w tekście, wpisz pusty string.\n"
+    system_prompt = base
+    user_prompt = f"Scenariusz pacjenta:\n\n{scenario}\n\nZwróć WYŁĄCZNIE JSON."
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+def generate_minimal_identity_prompt(scenario: str) -> List[Dict[str, str]]:
+    """Ask LLM to produce minimal identity: name and age.
+
+    Always return JSON with keys: name, age. If scenario lacks them,
+    wymyśl realistyczne polskie imię i wiek spójny z kontekstem.
+    """
+    system_prompt = (
+        "Jesteś ekstraktorem danych. Zwróć TYLKO poprawny JSON (bez komentarzy, bez markdown).\n\n"
+        "Wygeneruj klucze: name (string), age (string).\n"
+        "Jeśli scenariusz nie zawiera tych danych, wymyśl realistyczne polskie imię i wiek spójny z kontekstem."
+    )
+    user_prompt = f"Scenariusz pacjenta:\n\n{scenario}\n\nZwróć WYŁĄCZNIE JSON."
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
 def generate_interview_summary_prompt(chat_history: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """Generate a prompt for summarizing the interview conversation."""
     system_prompt = (
@@ -162,6 +265,10 @@ def generate_treatment_plan_prompt(
         "Jesteś doświadczonym lekarzem rodzinnym tworzącym kompleksowy plan postępowania medycznego.\n\n"
         "Na podstawie scenariusza pacjenta i całej historii wywiadu, wygeneruj POPRAWNY plan postępowania.\n\n"
         "Plan powinien zawierać następujące sekcje:\n\n"
+        "**DIAGNOZA:**\n"
+        "- Główna diagnoza (podejrzenie) na podstawie wywiadu\n"
+        "- Diagnozy różnicowe (jeśli istotne)\n"
+        "- Uzasadnienie diagnostyczne\n\n"
         "**LEKI (jeśli wskazane):**\n"
         "- Konkretne nazwy leków z dawkami\n"
         "- Uzasadnienie wyboru\n\n"
