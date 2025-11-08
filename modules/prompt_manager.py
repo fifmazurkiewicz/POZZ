@@ -343,3 +343,242 @@ def generate_diagnosis_evaluation_prompt(
     ]
 
 
+def assign_roles_and_suggest(
+    transcript: str,
+    context: Optional[str] = None,
+    previous_chunks: Optional[List[Dict]] = None,
+) -> List[Dict[str, str]]:
+    """Generuje prompt do przypisania ról (Lekarz/Pacjent) i sugestii pytań.
+    
+    Args:
+        transcript: Surowa transkrypcja z Whisper
+        context: Kontekst wywiadu (scenariusz pacjenta)
+        previous_chunks: Poprzednie chunki z przypisanymi rolami
+        
+    Returns:
+        Lista wiadomości dla LLM
+    """
+    previous_context = ""
+    if previous_chunks:
+        previous_context = "\n\nPoprzednie fragmenty wywiadu:\n"
+        for chunk in previous_chunks[-2:]:  # Ostatnie 2 chunki dla kontekstu
+            for segment in chunk.get("transcript", []):
+                role = segment.get("role", "unknown")
+                text = segment.get("text", "")
+                previous_context += f"{role.upper()}: {text}\n"
+    
+    context_text = f"\n\nKontekst pacjenta:\n{context}" if context else ""
+    
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Jesteś asystentem medycznym analizującym transkrypcję wywiadu lekarskiego. "
+                "Twoim zadaniem jest:\n"
+                "1. Przypisać role (Lekarz/Pacjent) do każdej wypowiedzi na podstawie treści\n"
+                "2. Wygenerować sugestie pytań lub informacji do zebrania\n\n"
+                "Zasady przypisywania ról:\n"
+                "- Lekarz zwykle zadaje pytania, używa terminologii medycznej, proponuje badania/leki\n"
+                "- Pacjent opisuje objawy, odpowiada na pytania, używa języka potocznego\n"
+                "- Pierwsza osoba mówiąca w wywiadzie to zwykle lekarz\n"
+                "- Analizuj kontekst i wzorce językowe\n\n"
+                "Odpowiedz TYLKO w formacie JSON:\n"
+                "{\n"
+                '  "transcript_with_roles": [\n'
+                '    {"role": "doctor"|"patient", "text": "...", "timestamp": 0.0},\n'
+                '    ...\n'
+                '  ],\n'
+                '  "suggestions": "Sugestie pytań lub informacji do zebrania..."\n'
+                "}"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Przeanalizuj poniższą transkrypcję wywiadu i przypisz role.{previous_context}{context_text}\n\n"
+                f"Transkrypcja do analizy:\n{transcript}\n\n"
+                "Przypisz role i wygeneruj sugestie."
+            ),
+        },
+    ]
+
+
+def generate_interview_summary(
+    transcripts_with_roles: List[Dict],
+    patient_scenario: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    """Generuje prompt do podsumowania całego wywiadu.
+    
+    Args:
+        transcripts_with_roles: Lista wszystkich transkrypcji z przypisanymi rolami
+        patient_scenario: Scenariusz pacjenta (opcjonalnie)
+        
+    Returns:
+        Lista wiadomości dla LLM
+    """
+    # Połącz wszystkie transkrypcje w jeden tekst
+    full_transcript = ""
+    for chunk in transcripts_with_roles:
+        for segment in chunk.get("transcript", []):
+            role = segment.get("role", "unknown")
+            text = segment.get("text", "")
+            timestamp = segment.get("timestamp", 0.0)
+            role_label = "Lekarz" if role == "doctor" else "Pacjent"
+            full_transcript += f"[{timestamp:.1f}s] {role_label}: {text}\n"
+    
+    context_text = f"\n\nScenariusz pacjenta:\n{patient_scenario}" if patient_scenario else ""
+    
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Jesteś asystentem medycznym tworzącym podsumowanie wywiadu lekarskiego. "
+                "Stwórz zwięzłe, profesjonalne podsumowanie zawierające:\n"
+                "- Główny powód wizyty\n"
+                "- Kluczowe objawy i dolegliwości\n"
+                "- Ważne informacje z wywiadu (choroby przewlekłe, leki, alergie)\n"
+                "- Proponowane działania (badania, leki, zalecenia)\n\n"
+                "Użyj języka medycznego, ale zrozumiałego. Odpowiedz po polsku."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Stwórz podsumowanie poniższego wywiadu.{context_text}\n\n"
+                f"Pełna transkrypcja wywiadu:\n{full_transcript}\n\n"
+                "Wygeneruj podsumowanie wywiadu."
+            ),
+        },
+    ]
+
+
+def extract_medical_info(
+    transcripts_with_roles: List[Dict],
+    doctor_proposals: Optional[str] = None,
+    patient_scenario: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    """Generuje prompt do ekstrakcji informacji medycznych i oceny propozycji lekarza.
+    
+    Args:
+        transcripts_with_roles: Lista wszystkich transkrypcji z przypisanymi rolami
+        doctor_proposals: Propozycje lekarza (leki, zalecenia, badania) - opcjonalnie
+        patient_scenario: Scenariusz pacjenta (opcjonalnie)
+        
+    Returns:
+        Lista wiadomości dla LLM
+    """
+    # Połącz wszystkie transkrypcje
+    full_transcript = ""
+    for chunk in transcripts_with_roles:
+        for segment in chunk.get("transcript", []):
+            role = segment.get("role", "unknown")
+            text = segment.get("text", "")
+            role_label = "Lekarz" if role == "doctor" else "Pacjent"
+            full_transcript += f"{role_label}: {text}\n"
+    
+    context_text = f"\n\nScenariusz pacjenta:\n{patient_scenario}" if patient_scenario else ""
+    proposals_text = (
+        f"\n\nPropozycje lekarza:\n{doctor_proposals}" if doctor_proposals else ""
+    )
+    
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Jesteś asystentem medycznym ekstrahującym informacje z wywiadu lekarskiego. "
+                "Twoim zadaniem jest:\n"
+                "1. Wyekstrahować leki, zalecenia i badania z wywiadu\n"
+                "2. Jeśli podano propozycje lekarza - ocenić je w kontekście wywiadu\n"
+                "3. Zaproponować poprawki jeśli potrzebne\n\n"
+                "Odpowiedz TYLKO w formacie JSON:\n"
+                "{\n"
+                '  "leki": ["lek1", "lek2", ...],\n'
+                '  "zalecenia": ["zalecenie1", "zalecenie2", ...],\n'
+                '  "badania": ["badanie1", "badanie2", ...],\n'
+                '  "ocena_propozycji_lekarza": "Ocena propozycji lekarza...",\n'
+                '  "sugestie_poprawek": "Sugestie poprawek jeśli potrzebne..."\n'
+                "}"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Wyekstrahuj informacje medyczne z poniższego wywiadu.{context_text}{proposals_text}\n\n"
+                f"Transkrypcja wywiadu:\n{full_transcript}\n\n"
+                "Wyekstrahuj leki, zalecenia, badania i oceń propozycje lekarza."
+            ),
+        },
+    ]
+
+
+def process_interview_transcript(
+    transcript: str,
+    patient_scenario: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    """Generuje prompt do przetworzenia całej transkrypcji wywiadu w jednym wywołaniu LLM.
+    
+    LLM wykonuje:
+    1. Przypisanie ról (Lekarz/Pacjent) do wypowiedzi
+    2. Stworzenie podsumowania wywiadu
+    3. Ekstrakcję informacji medycznych (leki, zalecenia, badania)
+    
+    Args:
+        transcript: Surowa transkrypcja z Whisper
+        patient_scenario: Scenariusz pacjenta (opcjonalnie)
+        
+    Returns:
+        Lista wiadomości dla LLM
+    """
+    context_text = f"\n\nScenariusz pacjenta (jeśli dostępny):\n{patient_scenario}" if patient_scenario else ""
+    
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Jesteś asystentem medycznym analizującym transkrypcję wywiadu lekarskiego. "
+                "Twoim zadaniem jest:\n\n"
+                "1. PRZYPISANIE RÓL:\n"
+                "   - Przypisz role (Lekarz/Pacjent) do każdej wypowiedzi na podstawie treści\n"
+                "   - Lekarz zwykle zadaje pytania, używa terminologii medycznej, proponuje badania/leki\n"
+                "   - Pacjent opisuje objawy, odpowiada na pytania, używa języka potocznego\n"
+                "   - Pierwsza osoba mówiąca w wywiadzie to zwykle lekarz\n"
+                "   - Dla każdej wypowiedzi przypisz timestamp (w sekundach od początku)\n\n"
+                "2. PODSUMOWANIE:\n"
+                "   - Stwórz zwięzłe, profesjonalne podsumowanie zawierające:\n"
+                "     * Główny powód wizyty\n"
+                "     * Kluczowe objawy i dolegliwości\n"
+                "     * Ważne informacje z wywiadu (choroby przewlekłe, leki, alergie)\n"
+                "     * Proponowane działania (badania, leki, zalecenia)\n\n"
+                "3. EKSTRAKCJA INFORMACJI:\n"
+                "   - Wyekstrahuj leki, zalecenia i badania z wywiadu\n"
+                "   - Oceń propozycje lekarza w kontekście wywiadu\n"
+                "   - Zaproponuj poprawki jeśli potrzebne\n\n"
+                "Odpowiedz TYLKO w formacie JSON:\n"
+                "{\n"
+                '  "transcript_with_roles": [\n'
+                '    {"role": "doctor"|"patient", "text": "...", "timestamp": 0.0},\n'
+                '    ...\n'
+                '  ],\n'
+                '  "summary": "Podsumowanie wywiadu...",\n'
+                '  "extracted_info": {\n'
+                '    "leki": ["lek1", "lek2", ...],\n'
+                '    "zalecenia": ["zalecenie1", "zalecenie2", ...],\n'
+                '    "badania": ["badanie1", "badanie2", ...],\n'
+                '    "ocena_propozycji_lekarza": "Ocena propozycji lekarza...",\n'
+                '    "sugestie_poprawek": "Sugestie poprawek jeśli potrzebne..."\n'
+                '  }\n'
+                "}"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Przeanalizuj poniższą transkrypcję wywiadu lekarskiego.{context_text}\n\n"
+                f"Transkrypcja do analizy:\n{transcript}\n\n"
+                "Przypisz role, stwórz podsumowanie i wyekstrahuj informacje medyczne. "
+                "Odpowiedz w formacie JSON zgodnie z instrukcjami."
+            ),
+        },
+    ]
+
+

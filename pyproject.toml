@@ -14,6 +14,7 @@ dependencies = [
   "boto3>=1.35.0",
  "streamlit-webrtc>=0.47.7",
  "streamlit-mic-recorder>=0.0.6",
+ "streamlit-audiorec-ru-fork>=0.0.8",
  "openai>=1.0.0",
  "groq>=0.4.0",
  "psycopg[binary]>=3.2.1",
