@@ -1330,8 +1330,81 @@ with tab_interview:
                 except Exception:
                     pass
                 st.rerun()
+            elif st.session_state.conversation_id:
+                # Sprawdź czy są transkrypcje chunków w bazie (nowy mechanizm chunkowania)
+                try:
+                    transcripts = db.get_interview_transcripts(st.session_state.conversation_id)
+                    if transcripts:
+                        # Wygeneruj podsumowanie z wszystkich chunków
+                        with st.spinner("Generowanie podsumowania z wszystkich chunków..."):
+                            transcripts_with_roles = []
+                            for chunk_num, transcript_json in sorted(transcripts, key=lambda x: x[0]):
+                                transcripts_with_roles.append({
+                                    "chunk_number": chunk_num,
+                                    "transcript": transcript_json.get("transcript", [])
+                                })
+                            
+                            # Wygeneruj podsumowanie
+                            summary_prompt = prompt_manager.generate_interview_summary(
+                                transcripts_with_roles=transcripts_with_roles,
+                                patient_scenario=st.session_state.patient_scenario if st.session_state.patient_scenario else None
+                            )
+                            
+                            summary = llm_service.get_llm_response(
+                                summary_prompt,
+                                model_name="google/gemini-2.5-flash-lite"
+                            )
+                            
+                            # Wygeneruj ekstrakcję informacji
+                            extract_prompt = prompt_manager.extract_medical_info(
+                                transcripts_with_roles=transcripts_with_roles,
+                                doctor_proposals=None,
+                                patient_scenario=st.session_state.patient_scenario if st.session_state.patient_scenario else None
+                            )
+                            
+                            extract_response = llm_service.get_llm_response(
+                                extract_prompt,
+                                model_name="google/gemini-2.5-flash-lite"
+                            )
+                            
+                            # Parsuj extracted info
+                            try:
+                                extracted_info = json.loads(extract_response)
+                            except json.JSONDecodeError:
+                                extracted_info = {}
+                            
+                            # Zapisz podsumowanie do bazy
+                            db.update_conversation_interview_summary(
+                                conversation_id=st.session_state.conversation_id,
+                                summary=summary,
+                                extracted_info=extracted_info
+                            )
+                            
+                            # Oznacz conversation jako "Nagrany wywiad" (jeśli jeszcze nie jest)
+                            try:
+                                from modules.db import get_cursor
+                                with get_cursor() as cur:
+                                    cur.execute(
+                                        "update conversations set title = %s, diagnosis_evaluation = %s where id = %s",
+                                        ("Nagrany wywiad", "OBSŁUŻONY - Nagrany wywiad", st.session_state.conversation_id)
+                                    )
+                            except Exception as e:
+                                st.warning(f"⚠️ Nie udało się oznaczyć konwersacji: {e}")
+                            
+                            # Zaktualizuj session state
+                            st.session_state.interview_summary = summary
+                            st.session_state.interview_extracted_info = extracted_info
+                            
+                            st.success("✅ Wywiad zakończony i przetworzony! Podsumowanie zostało zapisane do bazy.")
+                    else:
+                        st.warning("⚠️ Brak transkrypcji w bazie. Wywiad może być jeszcze w trakcie przetwarzania.")
+                except Exception as e:
+                    st.error(f"❌ Błąd podczas przetwarzania wywiadu: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+                st.rerun()
             else:
-                st.warning("⚠️ Brak nagranego audio. Nagraj wywiad używając mikrofonu powyżej.")
+                st.warning("⚠️ Brak nagranego audio i conversation_id. Nagraj wywiad używając mikrofonu powyżej.")
                 st.rerun()
     
     # Display transcript and summary after recording (only if not currently recording)
@@ -1568,8 +1641,9 @@ with tab_browse:
     if not rows:
         st.info("Brak zapisanych wywiadów.")
     else:
-        # Debug: show count
-        st.caption(f"Znaleziono {len(rows)} konwersacji")
+        # Debug: show count and types
+        nagrane_count = sum(1 for row in rows if row[2] == "Nagrany wywiad")
+        st.caption(f"Znaleziono {len(rows)} konwersacji (w tym {nagrane_count} nagranych wywiadów)")
         
         # Track displayed conversation IDs to avoid duplicates in UI
         displayed_ids = set()
@@ -1592,17 +1666,17 @@ with tab_browse:
             with col1:
                 # Determine display text based on conversation type
                 if title == "Nagrany wywiad":
-                    display_text = "Nagrany wywiad"
+                    display_text = "🎙️ Nagrany wywiad"
                     icon = "🎙️"
                 elif diagnosis_evaluation and "Skipped" in str(diagnosis_evaluation):
-                    display_text = "Skipped"
+                    display_text = "⏭️ Skipped"
                     icon = "⏭️"
                 else:
                     # Use patient summary (contains name and surname) or "Simulation"
                     if summary and summary != "Brak podsumowania":
                         display_text = summary
                     else:
-                        display_text = "Simulation"
+                        display_text = "📋 Simulation"
                     icon = "📋"
                 
                 button_text = f"{icon} {display_text}"
@@ -1623,19 +1697,18 @@ with tab_browse:
                 if transcripts:
                     st.subheader("📝 Transkrypcja wywiadu")
                     for chunk_num, transcript_json in transcripts:
-                        with st.expander(f"Chunka {chunk_num}", expanded=(chunk_num == 1)):
-                            transcript_segments = transcript_json.get("transcript", [])
-                            for segment in transcript_segments:
-                                role = segment.get("role", "unknown")
-                                text = segment.get("text", "")
-                                timestamp = segment.get("timestamp", 0.0)
-                                
-                                role_label = "Lekarz" if role == "doctor" else "Pacjent"
-                                role_icon = "👨‍⚕️" if role == "doctor" else "👤"
-                                
-                                st.markdown(f"**{role_icon} {role_label}** ({timestamp:.1f}s):")
-                                st.markdown(text)
-                                st.markdown("---")
+                        transcript_segments = transcript_json.get("transcript", [])
+                        for segment in transcript_segments:
+                            role = segment.get("role", "unknown")
+                            text = segment.get("text", "")
+                            timestamp = segment.get("timestamp", 0.0)
+                            
+                            role_label = "Lekarz" if role == "doctor" else "Pacjent"
+                            role_icon = "👨‍⚕️" if role == "doctor" else "👤"
+                            
+                            st.markdown(f"**{role_icon} {role_label}** ({timestamp:.1f}s):")
+                            st.markdown(text)
+                            st.markdown("---")
             except Exception as exc:
                 st.warning(f"Nie udało się pobrać transkrypcji: {exc}")
             
@@ -1732,8 +1805,7 @@ with tab_browse:
                                     suggestions = db.get_interview_suggestions(conv_id)
                                     if suggestions:
                                         for chunk_num, minute_num, suggestion_text in suggestions:
-                                            with st.expander(f"💡 Sugestie - Chunka {chunk_num}", expanded=(chunk_num == 1)):
-                                                st.info(suggestion_text)
+                                            st.info(suggestion_text)
                                     else:
                                         # If no suggestions, try to get evaluation from extracted_info
                                         try:
