@@ -5,9 +5,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# UWAGA: Zmień User i WorkingDirectory na właściwe ścieżki!
+# Przykład dla AWS EC2 z użytkownikiem ubuntu:
+# User=ubuntu
+# WorkingDirectory=/home/ubuntu/POZZ
+# ExecStart=/home/ubuntu/POZZ/monitor.sh
 User=%i
-WorkingDirectory=/path/to/POZZ
-ExecStart=/path/to/POZZ/monitor.sh
+WorkingDirectory=/home/ubuntu/POZZ
+ExecStart=/home/ubuntu/POZZ/monitor.sh
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -17,6 +22,8 @@ StandardError=journal
 Environment="CHECK_INTERVAL=300"
 Environment="MAX_RESTART_ATTEMPTS=5"
 Environment="PORT=8501"
+Environment="ENVIRONMENT=prod"
+Environment="AWS_REGION=eu-central-1"
 
 [Install]
 WantedBy=multi-user.target
