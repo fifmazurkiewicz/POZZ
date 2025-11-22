@@ -833,6 +833,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "streamlit" },
+    { name = "streamlit-audiorec-ru-fork" },
     { name = "streamlit-mic-recorder" },
     { name = "streamlit-webrtc" },
 ]
@@ -846,6 +847,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "streamlit", specifier = ">=1.36.0" },
+    { name = "streamlit-audiorec-ru-fork", specifier = ">=0.0.8" },
     { name = "streamlit-mic-recorder", specifier = ">=0.0.6" },
     { name = "streamlit-webrtc", specifier = ">=0.47.7" },
 ]
@@ -1667,6 +1669,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/59/6d/327ddd5fc35fcf2aeecb4040668337f5565a1c6c95b1e892b8bfd4bb9031/streamlit-1.51.0.tar.gz", hash = "sha256:1e742a9c0b698f466c6f5bf58d333beda5a1fbe8de660743976791b5c1446ef6", size = 9742904, upload-time = "2025-10-29T17:07:39.082Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/60/868371b6482ccd9ef423c6f62650066cf8271fdb2ee84f192695ad6b7a96/streamlit-1.51.0-py3-none-any.whl", hash = "sha256:4008b029f71401ce54946bb09a6a3e36f4f7652cbb48db701224557738cfda38", size = 10171702, upload-time = "2025-10-29T17:07:35.97Z" },
+]
+
+[[package]]
+name = "streamlit-audiorec-ru-fork"
+version = "0.1.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5d/ac/8c822d8d9fdf82d64ae6e7e471b203fa4f78680711aaaffba0095a80614e/streamlit_audiorec_ru_fork-0.1.6.tar.gz", hash = "sha256:60f9bc56c6bbd67e9a454e3d95158088bd34f14405482fd075c42cf72c5075a0", size = 3655, upload-time = "2024-10-12T06:29:59.692Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/79/8906f74747d0ace8bd03ead318ead729f9d6d17c9c4f89c64d230422d137/streamlit_audiorec_ru_fork-0.1.6-py3-none-any.whl", hash = "sha256:e9f5255d81084175e49f35c09ed180009b0d0504b3410d69bd20d03a5fd01b1b", size = 3998, upload-time = "2024-10-12T06:29:57.889Z" },
 ]
 
 [[package]]

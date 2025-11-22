@@ -4,7 +4,9 @@ import os
 import hashlib
 import random
 import re
-from typing import Optional, Dict, Any
+import json
+import time
+from typing import List, Optional, Dict, Any
 
 from modules import llm_service, prompt_manager
 from modules import db
@@ -147,6 +149,21 @@ if "user_treatment_response" not in st.session_state:
     st.session_state.user_treatment_response = None
 if "diagnosis_evaluation" not in st.session_state:
     st.session_state.diagnosis_evaluation = None
+# Interview recording state
+if "interview_recording_active" not in st.session_state:
+    st.session_state.interview_recording_active = False
+if "interview_recording_start_time" not in st.session_state:
+    st.session_state.interview_recording_start_time = None
+if "interview_chunks" not in st.session_state:
+    st.session_state.interview_chunks = []
+if "interview_suggestions" not in st.session_state:
+    st.session_state.interview_suggestions = []
+if "interview_processing_chunks" not in st.session_state:
+    st.session_state.interview_processing_chunks = set()
+if "interview_summary" not in st.session_state:
+    st.session_state.interview_summary = None
+if "interview_extracted_info" not in st.session_state:
+    st.session_state.interview_extracted_info = None
 
 # --- Initialize DB schema (no-op if exists) ---
 try:
@@ -381,7 +398,7 @@ def load_patient_to_session(patient_id: str):
         # Create new conversation
         try:
             st.session_state.conversation_id = db.create_conversation(
-                patient_id=patient_id, title="Initial interview"
+                patient_id=patient_id, title="Simulation"
             )
         except Exception:
             pass
@@ -914,7 +931,540 @@ with tab_sim:
         st.subheader("Tryb wywiadu")
         st.info("Najpierw wygeneruj pacjenta, aby móc rozpocząć wywiad.")
 
+# Helper function for processing a single chunk during recording
+def process_chunk_async(audio_bytes: bytes, chunk_number: int, conversation_id: str) -> Optional[str]:
+    """Process a single chunk: transcribe + LLM analysis + save suggestions.
+    
+    Returns:
+        Suggestion text if successful, None otherwise
+    """
+    try:
+        # Save audio to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+            tmp_file.write(audio_bytes)
+            tmp_path = tmp_file.name
+        
+        # Transcribe chunk
+        transcript = audio_processor.transcribe_audio_file(tmp_path, language="pl")
+        
+        if not transcript or not transcript.strip():
+            os.unlink(tmp_path)
+            return None
+        
+        # Get previous chunks for context
+        previous_chunks = []
+        try:
+            prev_transcripts = db.get_interview_transcripts(conversation_id)
+            for chunk_num, transcript_json in prev_transcripts:
+                if chunk_num < chunk_number:
+                    previous_chunks.append({
+                        "chunk_number": chunk_num,
+                        "transcript": transcript_json.get("transcript", [])
+                    })
+        except Exception:
+            pass
+        
+        # LLM: assign roles and generate suggestions
+        prompt = prompt_manager.assign_roles_and_suggest(
+            transcript=transcript,
+            context=None,  # No patient scenario for recorded interviews
+            previous_chunks=previous_chunks if previous_chunks else None
+        )
+        
+        response = llm_service.get_llm_response(
+            prompt,
+            model_name="google/gemini-2.5-flash-lite"
+        )
+        
+        # Extract JSON from response
+        def extract_json_from_response(text: str) -> str:
+            text = text.strip()
+            if text.startswith("```json"):
+                text = text[7:].strip()
+            elif text.startswith("```"):
+                text = text[3:].strip()
+            if text.endswith("```"):
+                text = text[:-3].strip()
+            return text
+        
+        try:
+            json_text = extract_json_from_response(response)
+            result = json.loads(json_text)
+            transcript_with_roles = result.get("transcript_with_roles", [])
+            suggestions = result.get("suggestions", "")
+            
+            # Save transcript chunk
+            db.save_interview_transcript(
+                conversation_id=conversation_id,
+                chunk_number=chunk_number,
+                transcript_json={"transcript": transcript_with_roles}
+            )
+            
+            # Save suggestions
+            minute_number = chunk_number * 1  # Each chunk is 10 seconds (for testing)
+            db.save_interview_suggestion(
+                conversation_id=conversation_id,
+                chunk_number=chunk_number,
+                minute_number=minute_number,
+                suggestions=suggestions
+            )
+            
+            # Return suggestion text for immediate display
+            return suggestions
+        except json.JSONDecodeError:
+            return None  # Skip if parsing fails
+        
+        # Clean up
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        
+        return None
+    
+    except Exception:
+        return None  # Fail silently for background processing
+
+
+# Helper function for processing interview audio
+def process_interview_audio(audio_file: str):
+    """Process complete interview audio (transcription + LLM analysis + summary)."""
+    if not st.session_state.conversation_id:
+        st.error("Brak conversation_id - nie można przetworzyć wywiadu")
+        return
+    
+    try:
+        # Step 1: Transcribe audio with Whisper
+        with st.spinner("🎤 Transkrypcja audio (Whisper)..."):
+            transcript = audio_processor.transcribe_audio_file(audio_file, language="pl")
+        
+        if not transcript or not transcript.strip():
+            st.error("❌ Nie udało się transkrypcji audio.")
+            return
+        
+        st.success(f"✅ Transkrypcja zakończona ({len(transcript)} znaków)")
+        
+        # Step 2: LLM - Assign roles, create summary, and extract info in ONE call
+        with st.spinner("🤖 Analiza LLM (przypisanie ról, podsumowanie, ekstrakcja)..."):
+            prompt = prompt_manager.process_interview_transcript(
+                transcript=transcript,
+                patient_scenario=st.session_state.patient_scenario if st.session_state.patient_scenario else None
+            )
+            
+            response = llm_service.get_llm_response(
+                prompt,
+                model_name="google/gemini-2.5-flash-lite"
+            )
+        
+        # Extract JSON from response (handle markdown code blocks)
+        def extract_json_from_response(text: str) -> str:
+            """Extract JSON from response, handling markdown code blocks."""
+            # Remove markdown code block markers
+            text = text.strip()
+            
+            # Remove ```json or ``` at the start
+            if text.startswith("```json"):
+                text = text[7:].strip()
+            elif text.startswith("```"):
+                text = text[3:].strip()
+            
+            # Remove ``` at the end
+            if text.endswith("```"):
+                text = text[:-3].strip()
+            
+            return text
+        
+        # Parse JSON response
+        try:
+            json_text = extract_json_from_response(response)
+            
+            result = json.loads(json_text)
+            transcript_with_roles = result.get("transcript_with_roles", [])
+            summary = result.get("summary", "")
+            extracted_info = result.get("extracted_info", {})
+            
+            # Save transcript to database
+            try:
+                db.save_interview_transcript(
+                    conversation_id=st.session_state.conversation_id,
+                    chunk_number=1,
+                    transcript_json={"transcript": transcript_with_roles}
+                )
+                st.success("✅ Transkrypcja z rolami zapisana do bazy")
+            except Exception as e:
+                st.error(f"❌ Błąd zapisu transkrypcji: {e}")
+                import traceback
+                st.text(traceback.format_exc())
+            
+            # Save summary and extracted info to database
+            try:
+                db.update_conversation_interview_summary(
+                    conversation_id=st.session_state.conversation_id,
+                    summary=summary,
+                    extracted_info=extracted_info
+                )
+                st.success("✅ Podsumowanie i ekstrakcja zapisane do bazy")
+            except Exception as e:
+                st.error(f"❌ Błąd zapisu podsumowania: {e}")
+                import traceback
+                st.text(traceback.format_exc())
+            
+            # Mark conversation as processed
+            try:
+                from modules.db import get_cursor
+                with get_cursor() as cur:
+                    cur.execute(
+                        "update conversations set diagnosis_evaluation = %s where id = %s",
+                        ("OBSŁUŻONY - Nagrany wywiad", st.session_state.conversation_id)
+                    )
+            except Exception as e:
+                st.warning(f"⚠️ Nie udało się oznaczyć konwersacji jako obsłużonej: {e}")
+            
+            # Update session state
+            st.session_state.interview_summary = summary
+            st.session_state.interview_extracted_info = extracted_info
+            
+            st.success("🎉 Wywiad przetworzony pomyślnie!")
+            
+        except json.JSONDecodeError as e:
+            # Show error in UI
+            st.error(f"❌ Błąd parsowania odpowiedzi LLM: {e}")
+            st.text("Odpowiedź LLM (pierwsze 2000 znaków):")
+            st.text(response[:2000])
+            st.text("\nOstatnie 1000 znaków:")
+            st.text(response[-1000:] if len(response) > 1000 else response)
+    
+    except Exception as exc:
+        st.error(f"Błąd przetwarzania wywiadu: {exc}")
+
+
+# Helper functions for interview processing
+def process_all_chunks(all_chunks: List[str], last_fragment: Optional[str]):
+    """Process all chunks and generate final summary."""
+    if not st.session_state.conversation_id:
+        return
+    
+    # Process all chunks
+    chunks_to_process = all_chunks.copy()
+    if last_fragment:
+        chunks_to_process.append(last_fragment)
+    
+    # Process chunks using the new function signature
+    for idx, chunk_file in enumerate(chunks_to_process, 1):
+        # Read audio file and process
+        if os.path.exists(chunk_file) and st.session_state.conversation_id:
+            with open(chunk_file, 'rb') as f:
+                audio_bytes = f.read()
+            process_chunk_async(
+                audio_bytes=audio_bytes,
+                chunk_number=idx,
+                conversation_id=st.session_state.conversation_id
+            )
+    
+    # Get all transcripts
+    transcripts = db.get_interview_transcripts(st.session_state.conversation_id)
+    
+    # Prepare transcripts for summary
+    transcripts_with_roles = []
+    for chunk_num, transcript_json in transcripts:
+        transcripts_with_roles.append({
+            "chunk_number": chunk_num,
+            "transcript": transcript_json.get("transcript", [])
+        })
+    
+    # Generate summary
+    summary_prompt = prompt_manager.generate_interview_summary(
+        transcripts_with_roles=transcripts_with_roles,
+        patient_scenario=st.session_state.patient_scenario
+    )
+    
+    summary = llm_service.get_llm_response(
+        summary_prompt,
+        model_name="google/gemini-2.5-flash-lite"
+    )
+    
+    # Extract medical info
+    extract_prompt = prompt_manager.extract_medical_info(
+        transcripts_with_roles=transcripts_with_roles,
+        doctor_proposals=None,  # TODO: Add doctor proposals input
+        patient_scenario=st.session_state.patient_scenario
+    )
+    
+    extract_response = llm_service.get_llm_response(
+        extract_prompt,
+        model_name="google/gemini-2.5-flash-lite"
+    )
+    
+    # Parse extracted info
+    try:
+        extracted_info = json.loads(extract_response)
+    except json.JSONDecodeError:
+        extracted_info = {}
+    
+    # Save to database
+    db.update_conversation_interview_summary(
+        conversation_id=st.session_state.conversation_id,
+        summary=summary,
+        extracted_info=extracted_info
+    )
+    
+    # Update session state
+    st.session_state.interview_summary = summary
+    st.session_state.interview_extracted_info = extracted_info
+
+
 with tab_interview:
+    # Interview recording section
+    st.subheader("🎙️ Nagrywanie wywiadu")
+    
+    # Initialize recording state
+    if "interview_audio_file" not in st.session_state:
+        st.session_state.interview_audio_file = None
+    if "interview_recording_started" not in st.session_state:
+        st.session_state.interview_recording_started = False
+    
+    # Start recording button
+    if not st.session_state.interview_recording_started:
+        if st.button("▶️ Rozpocznij wywiad", type="secondary", use_container_width=False):
+            # Create conversation for interview (with or without patient_id)
+            try:
+                patient_id = st.session_state.patient_id if st.session_state.patient_id else None
+                # If no patient_id, create a temporary patient record for the interview
+                if not patient_id:
+                    # Create a temporary patient with minimal info
+                    patient_id = db.create_patient(
+                        scenario="Wywiad z rzeczywistym pacjentem",
+                        summary="Wywiad nagrany"
+                    )
+                    st.session_state.patient_id = patient_id
+                
+                conv_id = db.create_conversation(
+                    patient_id=patient_id,
+                    title="Nagrany wywiad"
+                )
+                st.session_state.conversation_id = conv_id
+                st.session_state.interview_recording_started = True
+                st.session_state.interview_recording_start_time = time.time()
+                st.session_state.interview_audio_file = None
+                # Clear old interview data
+                st.session_state.interview_summary = None
+                st.session_state.interview_extracted_info = None
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Błąd tworzenia konwersacji: {exc}")
+    
+    # Recording interface
+    if st.session_state.interview_recording_started:
+        # Calculate duration
+        if st.session_state.interview_recording_start_time:
+            duration = time.time() - st.session_state.interview_recording_start_time
+        else:
+            duration = 0.0
+        
+        minutes = int(duration // 60)
+        seconds = int(duration % 60)
+        duration_str = f"{minutes:02d}:{seconds:02d}"
+        
+        st.info(f"⏺️ Nagrywanie w toku... | Czas: {duration_str}")
+        
+        # Simple microphone recorder
+        recording_active = False
+        try:
+            from streamlit_mic_recorder import mic_recorder
+            
+            col_mic1, col_mic2, col_mic3 = st.columns([1, 2, 1])
+            with col_mic2:
+                audio = mic_recorder(
+                    start_prompt="🎤 Nagrywanie",
+                    stop_prompt="⏹ Zatrzymaj nagranie",
+                    just_once=False,
+                    use_container_width=True,
+                    format="wav",
+                    key="interview_mic_recorder",
+                )
+            
+            # Check if recording is active (no audio bytes yet means recording is in progress)
+            if audio is None or not audio.get("bytes"):
+                recording_active = True
+            
+            # Save audio when recording stops
+            if audio and audio.get("bytes"):
+                audio_bytes = audio["bytes"]
+                audio_hash = hashlib.md5(audio_bytes).hexdigest()
+                
+                # Check if this is new audio (not already saved)
+                if audio_hash != st.session_state.get("last_interview_audio_hash"):
+                    st.session_state.last_interview_audio_hash = audio_hash
+                    
+                    # Save audio to temp file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+                        tmp_file.write(audio_bytes)
+                        tmp_path = tmp_file.name
+                    
+                    st.session_state.interview_audio_file = tmp_path
+        
+        except ImportError:
+            st.error("❌ Biblioteka streamlit-mic-recorder nie jest zainstalowana")
+            st.info("📦 Wykonaj: `uv add streamlit-mic-recorder` i zrestartuj aplikację")
+        except Exception as e:
+            st.error(f"❌ Błąd nagrywania: {e}")
+        
+        # Stop button - disabled when recording is active
+        if st.button(
+            "⏹️ Zakończ wywiad", 
+            type="secondary", 
+            use_container_width=False,
+            disabled=recording_active
+        ):
+            st.session_state.interview_recording_started = False
+            
+            # Process final audio if available
+            if st.session_state.interview_audio_file and os.path.exists(st.session_state.interview_audio_file):
+                with st.spinner("Przetwarzanie wywiadu (transkrypcja + analiza + podsumowanie)..."):
+                    process_interview_audio(st.session_state.interview_audio_file)
+                st.success("✅ Wywiad zakończony i przetworzony!")
+                # Clean up
+                try:
+                    os.unlink(st.session_state.interview_audio_file)
+                    st.session_state.interview_audio_file = None
+                except Exception:
+                    pass
+                st.rerun()
+            elif st.session_state.conversation_id:
+                # Sprawdź czy są transkrypcje chunków w bazie (nowy mechanizm chunkowania)
+                try:
+                    transcripts = db.get_interview_transcripts(st.session_state.conversation_id)
+                    if transcripts:
+                        # Wygeneruj podsumowanie z wszystkich chunków
+                        with st.spinner("Generowanie podsumowania z wszystkich chunków..."):
+                            transcripts_with_roles = []
+                            for chunk_num, transcript_json in sorted(transcripts, key=lambda x: x[0]):
+                                transcripts_with_roles.append({
+                                    "chunk_number": chunk_num,
+                                    "transcript": transcript_json.get("transcript", [])
+                                })
+                            
+                            # Wygeneruj podsumowanie
+                            summary_prompt = prompt_manager.generate_interview_summary(
+                                transcripts_with_roles=transcripts_with_roles,
+                                patient_scenario=st.session_state.patient_scenario if st.session_state.patient_scenario else None
+                            )
+                            
+                            summary = llm_service.get_llm_response(
+                                summary_prompt,
+                                model_name="google/gemini-2.5-flash-lite"
+                            )
+                            
+                            # Wygeneruj ekstrakcję informacji
+                            extract_prompt = prompt_manager.extract_medical_info(
+                                transcripts_with_roles=transcripts_with_roles,
+                                doctor_proposals=None,
+                                patient_scenario=st.session_state.patient_scenario if st.session_state.patient_scenario else None
+                            )
+                            
+                            extract_response = llm_service.get_llm_response(
+                                extract_prompt,
+                                model_name="google/gemini-2.5-flash-lite"
+                            )
+                            
+                            # Parsuj extracted info
+                            try:
+                                extracted_info = json.loads(extract_response)
+                            except json.JSONDecodeError:
+                                extracted_info = {}
+                            
+                            # Zapisz podsumowanie do bazy
+                            db.update_conversation_interview_summary(
+                                conversation_id=st.session_state.conversation_id,
+                                summary=summary,
+                                extracted_info=extracted_info
+                            )
+                            
+                            # Oznacz conversation jako "Nagrany wywiad" (jeśli jeszcze nie jest)
+                            try:
+                                from modules.db import get_cursor
+                                with get_cursor() as cur:
+                                    cur.execute(
+                                        "update conversations set title = %s, diagnosis_evaluation = %s where id = %s",
+                                        ("Nagrany wywiad", "OBSŁUŻONY - Nagrany wywiad", st.session_state.conversation_id)
+                                    )
+                            except Exception as e:
+                                st.warning(f"⚠️ Nie udało się oznaczyć konwersacji: {e}")
+                            
+                            # Zaktualizuj session state
+                            st.session_state.interview_summary = summary
+                            st.session_state.interview_extracted_info = extracted_info
+                            
+                            st.success("✅ Wywiad zakończony i przetworzony! Podsumowanie zostało zapisane do bazy.")
+                    else:
+                        st.warning("⚠️ Brak transkrypcji w bazie. Wywiad może być jeszcze w trakcie przetwarzania.")
+                except Exception as e:
+                    st.error(f"❌ Błąd podczas przetwarzania wywiadu: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+                st.rerun()
+            else:
+                st.warning("⚠️ Brak nagranego audio i conversation_id. Nagraj wywiad używając mikrofonu powyżej.")
+                st.rerun()
+    
+    # Display transcript and summary after recording (only if not currently recording)
+    if st.session_state.conversation_id and not st.session_state.interview_recording_started:
+        # Show transcript if available
+        try:
+            transcripts = db.get_interview_transcripts(st.session_state.conversation_id)
+            if transcripts:
+                st.divider()
+                st.subheader("📝 Transkrypcja wywiadu")
+                for chunk_num, transcript_json in transcripts:
+                    transcript_segments = transcript_json.get("transcript", [])
+                    for segment in transcript_segments:
+                        role = segment.get("role", "unknown")
+                        text = segment.get("text", "")
+                        timestamp = segment.get("timestamp", 0.0)
+                        
+                        role_label = "Lekarz" if role == "doctor" else "Pacjent"
+                        role_icon = "👨‍⚕️" if role == "doctor" else "👤"
+                        
+                        st.markdown(f"**{role_icon} {role_label}** ({timestamp:.1f}s):")
+                        st.markdown(text)
+                        st.markdown("---")
+        except Exception:
+            pass  # Ignore errors for transcript
+    
+    # Display summary after recording (only if not currently recording)
+    if st.session_state.interview_summary and not st.session_state.interview_recording_started:
+        st.divider()
+        st.subheader("📋 Podsumowanie wywiadu")
+        st.markdown(st.session_state.interview_summary)
+        
+        if st.session_state.interview_extracted_info:
+            st.subheader("💊 Ekstrakcja informacji")
+            info = st.session_state.interview_extracted_info
+            
+            if info.get("leki"):
+                st.write("**Leki:**")
+                for lek in info["leki"]:
+                    st.write(f"- {lek}")
+            
+            if info.get("zalecenia"):
+                st.write("**Zalecenia:**")
+                for zalecenie in info["zalecenia"]:
+                    st.write(f"- {zalecenie}")
+            
+            if info.get("badania"):
+                st.write("**Badania:**")
+                for badanie in info["badania"]:
+                    st.write(f"- {badanie}")
+            
+            if info.get("ocena_propozycji_lekarza"):
+                st.write("**Ocena propozycji lekarza:**")
+                st.info(info["ocena_propozycji_lekarza"])
+            
+            if info.get("sugestie_poprawek"):
+                st.write("**Sugestie poprawek:**")
+                st.warning(info["sugestie_poprawek"])
+    
+    st.divider()
     st.subheader("Ręczne tworzenie wywiadu")
     
     # Patient scenario input
@@ -1091,11 +1641,46 @@ with tab_browse:
     if not rows:
         st.info("Brak zapisanych wywiadów.")
     else:
+        # Debug: show count and types
+        nagrane_count = sum(1 for row in rows if row[2] == "Nagrany wywiad")
+        st.caption(f"Znaleziono {len(rows)} konwersacji (w tym {nagrane_count} nagranych wywiadów)")
+        
+        # Track displayed conversation IDs to avoid duplicates in UI
+        displayed_ids = set()
+        
         # List of conversations
-        for conv_id, created_at, title, summary in rows:
+        for row in rows:
+            # Unpack row - handle both old format (4 elements) and new format (5 elements)
+            conv_id = row[0]
+            created_at = row[1]
+            title = row[2]
+            summary = row[3]
+            diagnosis_evaluation = row[4] if len(row) > 4 else None
+            
+            # Skip if we've already displayed this conversation ID
+            if conv_id in displayed_ids:
+                continue
+            displayed_ids.add(conv_id)
+            
             col1, col2 = st.columns([4, 1])
             with col1:
-                if st.button(f"📋 {summary}", key=f"conv_{conv_id}", use_container_width=True):
+                # Determine display text based on conversation type
+                if title == "Nagrany wywiad":
+                    display_text = "🎙️ Nagrany wywiad"
+                    icon = "🎙️"
+                elif diagnosis_evaluation and "Skipped" in str(diagnosis_evaluation):
+                    display_text = "⏭️ Skipped"
+                    icon = "⏭️"
+                else:
+                    # Use patient summary (contains name and surname) or "Simulation"
+                    if summary and summary != "Brak podsumowania":
+                        display_text = summary
+                    else:
+                        display_text = "📋 Simulation"
+                    icon = "📋"
+                
+                button_text = f"{icon} {display_text}"
+                if st.button(button_text, key=f"conv_{conv_id}", use_container_width=True):
                     st.session_state.selected_conversation_id = conv_id
                     st.rerun()
             with col2:
@@ -1105,6 +1690,62 @@ with tab_browse:
         if st.session_state.selected_conversation_id:
             st.divider()
             conv_id = st.session_state.selected_conversation_id
+            
+            # Show interview transcript if available
+            try:
+                transcripts = db.get_interview_transcripts(conv_id)
+                if transcripts:
+                    st.subheader("📝 Transkrypcja wywiadu")
+                    for chunk_num, transcript_json in transcripts:
+                        transcript_segments = transcript_json.get("transcript", [])
+                        for segment in transcript_segments:
+                            role = segment.get("role", "unknown")
+                            text = segment.get("text", "")
+                            timestamp = segment.get("timestamp", 0.0)
+                            
+                            role_label = "Lekarz" if role == "doctor" else "Pacjent"
+                            role_icon = "👨‍⚕️" if role == "doctor" else "👤"
+                            
+                            st.markdown(f"**{role_icon} {role_label}** ({timestamp:.1f}s):")
+                            st.markdown(text)
+                            st.markdown("---")
+            except Exception as exc:
+                st.warning(f"Nie udało się pobrać transkrypcji: {exc}")
+            
+            # Show interview summary if available
+            try:
+                interview_data = db.get_conversation_interview_data(conv_id)
+                if interview_data:
+                    summary, extracted_info = interview_data
+                    if summary:
+                        st.divider()
+                        st.subheader("📋 Podsumowanie wywiadu")
+                        st.markdown(summary)
+                    
+                    if extracted_info:
+                        st.subheader("💊 Ekstrakcja informacji")
+                        if extracted_info.get("leki"):
+                            st.write("**Leki:**")
+                            for lek in extracted_info["leki"]:
+                                st.write(f"- {lek}")
+                        if extracted_info.get("zalecenia"):
+                            st.write("**Zalecenia:**")
+                            for zalecenie in extracted_info["zalecenia"]:
+                                st.write(f"- {zalecenie}")
+                        if extracted_info.get("badania"):
+                            st.write("**Badania:**")
+                            for badanie in extracted_info["badania"]:
+                                st.write(f"- {badanie}")
+                        if extracted_info.get("ocena_propozycji_lekarza"):
+                            st.write("**Ocena propozycji lekarza:**")
+                            st.info(extracted_info["ocena_propozycji_lekarza"])
+                        if extracted_info.get("sugestie_poprawek"):
+                            st.write("**Sugestie poprawek:**")
+                            st.warning(extracted_info["sugestie_poprawek"])
+            except Exception:
+                pass  # Ignore errors for interview data
+            
+            st.divider()
             
             # Get conversation details
             try:
@@ -1127,36 +1768,74 @@ with tab_browse:
                         # Display conversation details
                         st.subheader("📋 Szczegóły wywiadu")
                         
-                        # Patient scenario
-                        with st.expander("👤 Scenariusz pacjenta", expanded=True):
-                            st.markdown(scenario)
+                        # Patient scenario (only for non-recorded interviews)
+                        if conv_title != "Nagrany wywiad":
+                            with st.expander("👤 Scenariusz pacjenta", expanded=True):
+                                st.markdown(scenario)
+                            st.divider()
                         
-                        st.divider()
+                        # Conversation messages (only for non-recorded interviews)
+                        if conv_title != "Nagrany wywiad":
+                            st.subheader("💬 Konwersacja")
+                            if messages:
+                                for msg_id, role, content, msg_time in messages:
+                                    speaker = "Lekarz" if role == "user" else "Pacjent"
+                                    with st.chat_message("user" if role == "user" else "assistant"):
+                                        st.markdown(f"**{speaker}:** {content}")
+                            else:
+                                st.info("Brak wiadomości w tym wywiadzie.")
+                            
+                            st.divider()
+                            
+                            # User treatment response (only for non-recorded interviews)
+                            if user_response:
+                                st.subheader("💊 Twoje zalecenia/odpowiedź")
+                                st.markdown(user_response)
+                            else:
+                                st.info("Brak zapisanych zaleczeń.")
                         
-                        # Conversation messages
-                        st.subheader("💬 Konwersacja")
-                        if messages:
-                            for msg_id, role, content, msg_time in messages:
-                                speaker = "Lekarz" if role == "user" else "Pacjent"
-                                with st.chat_message("user" if role == "user" else "assistant"):
-                                    st.markdown(f"**{speaker}:** {content}")
-                        else:
-                            st.info("Brak wiadomości w tym wywiadzie.")
-                        
-                        st.divider()
-                        
-                        # User treatment response
-                        if user_response:
-                            st.subheader("💊 Twoje zalecenia/odpowiedź")
-                            st.markdown(user_response)
-                        else:
-                            st.info("Brak zapisanych zaleczeń.")
-                        
-                        # Evaluation if available
+                        # Evaluation if available (for both recorded and non-recorded interviews)
                         if evaluation:
                             st.divider()
                             st.subheader("📊 Ocena diagnozy")
-                            st.markdown(evaluation)
+                            # For recorded interviews, show suggestions from LLM
+                            if conv_title == "Nagrany wywiad":
+                                # Get and display LLM suggestions
+                                try:
+                                    suggestions = db.get_interview_suggestions(conv_id)
+                                    if suggestions:
+                                        for chunk_num, minute_num, suggestion_text in suggestions:
+                                            st.info(suggestion_text)
+                                    else:
+                                        # If no suggestions, try to get evaluation from extracted_info
+                                        try:
+                                            interview_data = db.get_conversation_interview_data(conv_id)
+                                            if interview_data:
+                                                summary, extracted_info = interview_data
+                                                if extracted_info and extracted_info.get("ocena_propozycji_lekarza"):
+                                                    st.markdown(extracted_info["ocena_propozycji_lekarza"])
+                                                elif evaluation != "OBSŁUŻONY - Nagrany wywiad":
+                                                    st.markdown(evaluation)
+                                                else:
+                                                    st.info("✅ Wywiad został nagrany i przetworzony.")
+                                            else:
+                                                if evaluation != "OBSŁUŻONY - Nagrany wywiad":
+                                                    st.markdown(evaluation)
+                                                else:
+                                                    st.info("✅ Wywiad został nagrany i przetworzony.")
+                                        except Exception:
+                                            if evaluation != "OBSŁUŻONY - Nagrany wywiad":
+                                                st.markdown(evaluation)
+                                            else:
+                                                st.info("✅ Wywiad został nagrany i przetworzony.")
+                                except Exception:
+                                    # Fallback to showing evaluation if available
+                                    if evaluation != "OBSŁUŻONY - Nagrany wywiad":
+                                        st.markdown(evaluation)
+                                    else:
+                                        st.info("✅ Wywiad został nagrany i przetworzony.")
+                            else:
+                                st.markdown(evaluation)
                         
                         # Back button
                         if st.button("← Wróć do listy", use_container_width=True):
@@ -1183,7 +1862,7 @@ with tab_admin:
         )
     with col_gen2:
         st.write("")  # Spacer
-        if st.button("🚀 Generuj masowo", use_container_width=True, type="primary"):
+        if st.button("🚀 Generuj masowo", use_container_width=True, type="secondary"):
             if num_patients > 0:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
@@ -1225,7 +1904,7 @@ with tab_admin:
     st.markdown("### ⚠️ Zarządzanie danymi (niebezpieczne)")
     st.warning("Operacje w tej sekcji są nieodwracalne. Upewnij się, że wiesz co robisz.")
     confirm = st.text_input("Aby wyczyścić bazę wpisz: WYMAŻ", value="")
-    if st.button("🗑️ Wyzeruj bazę danych", type="primary"):
+    if st.button("🗑️ Wyzeruj bazę danych", type="secondary"):
         if confirm.strip().upper() == "WYMAŻ":
             try:
                 db.wipe_all_data()
