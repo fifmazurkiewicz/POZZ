@@ -1,0 +1,11 @@
+# Taste dials (POZZ overlay)
+
+Use these values instead of Taste Skill baseline 8/6/4. POZZ is a **clinical training PWA** (Simulation / Interview / Menu), not a marketing landing.
+
+| Dial | Value | Why |
+|---|---|---|
+| VARIANCE | 3 | Trust-first clinical chrome; Classical tokens in `docs/ux/` |
+| MOTION | 2 | Pulse / status dots only; honor `prefers-reduced-motion` |
+| DENSITY | 6 | Tool chrome: patient card, transcript, composer, bottom nav |
+
+Existing UX spec and CSS tokens win. Do not add a parallel color/font rule in `.cursor/rules/`.

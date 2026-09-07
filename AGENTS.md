@@ -1,0 +1,84 @@
+# POZZ — agent notes
+
+## Stack (must match deployment standard)
+
+| Layer | Platform |
+|---|---|
+| Frontend | **Vercel** (Next.js PWA, greenfield) |
+| Backend | **Render** (FastAPI / Docker) |
+| Database + Auth | **Supabase** (Postgres, Google OAuth, RLS) |
+
+Voice/text: OpenRouter (text) + Groq Whisper STT (chained). Langfuse Cloud = prompt SoT. No Redis in MVP. Domains: `pozz` / `api-pozz`.fmazurkiewicz.dev — see `docs/architecture-for-cursor.md`.
+
+**Legacy:** root `app.py` + `modules/` is a Streamlit prototype (AWS Secrets Manager + cloudflared). It is **reference only** — not the production deploy target. New product code lives in `backend/` + `frontend/` after greenfield Task 0.
+
+## Commands
+
+```bash
+# Legacy Streamlit (local reference only — not Vercel/Render)
+# cp .env.example .env   # fill DATABASE_URL + OPENROUTER_API_KEY
+# uv sync && uv run streamlit run app.py --server.port 8501
+
+# Greenfield backend (after Task 0 scaffold exists)
+cd backend && python -m pip install -r requirements.txt
+cd backend && python -m scripts.create_tables   # local Postgres
+cd backend && uvicorn app.main:app --reload --port 8000
+cd backend && python -m pytest
+cd backend && npm install && npm run promptfoo   # mock provider, no API keys
+
+# Greenfield frontend (after Task 0 scaffold exists)
+cd frontend && npm install && npm run dev
+cd frontend && npm run lint && npm test && npm run build
+
+# Health: GET http://localhost:8000/api/health
+```
+
+Until Task 0 lands, `backend/` and `frontend/` contain agent notes only — do not invent a second Streamlit deploy path.
+
+Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empty so the frontend sends `dev-token`, and set `DEV_AUTH_ENABLED=true` (with empty `SUPABASE_URL`) so the backend accepts it. Production rejects `dev-token`.
+
+## Docs map
+
+| Path | Role |
+|---|---|
+| `docs/architecture-for-cursor.md` | Business + technical architecture (authoritative for build) |
+| `docs/ux/` | UX/UI spec, decisions, screens, design system |
+| `docs/business/` | Business-only artifacts (to be filled) |
+| `docs/technical/` | Local setup, env names (`configuration.md`), ADRs |
+
+## Graft + Superpowers
+
+- **Superpowers:** process skills before action (global `superpowers.mdc`). Creative work → brainstorming → writing-plans.
+- **Graft:** before broad exploration `npx -y @nanonets/graft map` / `graft ask "…" --source` (or MCP). Cache in `/graft/` (gitignored — never commit). Wiring: `.cursor/rules/graft.mdc`, `.cursor/mcp.json`. Native global install may need VS C++ build tools; `npx` is enough. Rebuild with `npx -y @nanonets/graft build` when `graft check` reports no graph.
+- **Taste:** skill `design-taste-frontend` (global, not in git). Overlay `.cursor/rules/taste-skill-dials.mdc` — VARIANCE 3 / MOTION 2 / DENSITY 6 (clinical / trust-first).
+- **Language:** user may write Polish; agent replies and new code in English (`language.mdc`). Product UI already in Polish is preserve.
+
+## Learned User Preferences
+
+- Keep Superpowers mandatory; Graft and Superpowers belong in global Cursor rules; greenfield FastAPI + Next.js — Streamlit is reference only; no feature code until scaffold + relevant plan Task 0 pass.
+- Product UI language is always Polish. Agent chat, identifiers, commits, and docs the agent writes are English.
+- Stack must match `deployment-standard.mdc`: Vercel + Render + Supabase. Do not reintroduce AWS EC2, Secrets Manager, or cloudflared quick tunnels as the production path.
+- Native language of doctors using the app is Polish; simulated patients speak Polish; LLM prompts force Polish output.
+- Chat always has a text input; voice is optional (mic → STT). Patient replies are text in MVP (no patient TTS unless a later spec adds it).
+- Simulation modes: doctor asks / patient asks / ask the AI (meta). End interview → doctor writes treatment plan → LLM evaluation vs hidden gold plan.
+- Recorded interview (real audio) is a separate surface from the simulated patient chat.
+- New public signups wait on `AuthGate` until admin Accept (`users.is_approved`); allowlist / local `dev-token` auto-approved on insert only.
+- Monthly spend_cap is admin-configurable and sums STT + gen AI (+ TTS if added); when exceeded, block costly actions for the rest of the month but allow browsing existing sessions.
+- Menu hub: Profile, Sessions, Appearance (System/Light/Dark), optional Admin, Sign out.
+- Bottom nav is Simulation / Interview / Menu.
+- Admin: bulk-generate patient catalog, spend caps, approval queue. Database wipe is admin-only with typed confirmation.
+
+## Learned Workspace Facts
+
+- POZZ is **greenfield** for production (FastAPI + Next.js PWA). The Streamlit app is the working prototype and **reference only**. ADR: `docs/technical/decisions/2026-09-07-greenfield-no-streamlit-deploy.md`.
+- Target production: Supabase + Render + Vercel + Cloudflare; Render Root Directory `backend`, Runtime Docker (never `Docker` as root); Cloudflare `api-pozz` CNAME to Render DNS-only, `pozz` CNAME to Vercel — separate records; Google OAuth callback `/auth/callback` with server-side PKCE exchange (not client-side on `/`).
+- Supabase RLS will enforce per-user access on conversations, messages, transcripts; shared `patients` catalog is readable by approved users; `jobs` admin-only. Render backend bypasses RLS via direct SQLAlchemy (defense in depth for direct Supabase client).
+- Langfuse Cloud is the runtime prompt SoT (tracing, cost, prompt management); promptfoo suites gate CI (`npm run promptfoo`, no API keys) once backend exists.
+- Default new-user `spend_cap_usd` is 10 per calendar month (Europe/Warsaw).
+- Default `TEXT_MODEL` is `google/gemini-2.5-flash-lite` on OpenRouter (matches the prototype). Deprecated slugs return 404 — set explicitly in Render env after deploy.
+- STT default: Groq Whisper (`whisper-large-v3`), fallback OpenAI / OpenRouter. No durable audio blobs in MVP (`audio_ref` null); temp files only.
+- Patient catalog is shared; conversations and evaluations are per-user. “Next patient” means an unused-by-this-user catalog row, or generate on demand from keywords.
+- First-time patients (~20%): card shows name + age only; chronic / ops / allergies / family history must be gathered in the interview.
+- Hidden scenario gold (full HPI, traps, treatment plan) is never shown until after End interview evaluation.
+- `diarization_test/` is experimental Gradio work — out of MVP deploy.
+- Graft `/graft/` remains gitignored. Native `graft build` may fail without tree-sitter build tools; MCP + rule wiring is enough until then.

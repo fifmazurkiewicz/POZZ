@@ -1,0 +1,14 @@
+title = "POZZ"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Env templates and empty KEY= placeholders — not live secrets"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)frontend/\.env\.example$''',
+]
+regexes = [
+  '''(?i)[A-Z0-9_]*API[_-]?KEY=\s*$''',
+]

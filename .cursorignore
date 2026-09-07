@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+frontend/.env.local
+frontend/.env.*.local
+credentials.json
+secrets.toml
+graft/
+logs/
