@@ -9,6 +9,8 @@ Living contract for the product. Code follows these docs (spec-driven).
 | [architecture-for-cursor.md](./architecture-for-cursor.md) | **Business + technical** — MVP, stack, domain, data model, spend cap, Langfuse/promptfoo, build order |
 | [superpowers/specs/2026-09-07-domain-user-journey-design.md](./superpowers/specs/2026-09-07-domain-user-journey-design.md) | Approved user-journey / domain flow |
 | [superpowers/specs/2026-09-07-stack-deploy-design.md](./superpowers/specs/2026-09-07-stack-deploy-design.md) | Stack, deploy, voice path, agents |
+| [superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md](./superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md) | Simulation Live vs TTS lamp |
+| [superpowers/specs/2026-09-08-refactor-build-order-design.md](./superpowers/specs/2026-09-08-refactor-build-order-design.md) | Package order after Streamlit |
 | [ux/ux-ui-spec.md](./ux/ux-ui-spec.md) | UX contract (behavior) |
 | [ux/ux-ui-decisions.md](./ux/ux-ui-decisions.md) | Classical DS + screen decisions |
 | [technical/local-setup.md](./technical/local-setup.md) | Local run without Docker |

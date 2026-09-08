@@ -14,20 +14,23 @@ Approved hosting + provider contract. Synced into `docs/architecture-for-cursor.
 | Langfuse | **Cloud**; **runtime SoT for prompts**; repo holds promptfoo fixtures only |
 | promptfoo | Pre-deploy / CI against repo fixtures (after backend exists) |
 
-## Voice (MVP)
+## Voice (MVP) — **MODIFIED 2026-09-08**
 
-- `VOICE_MODE=chained` only.
-- Doctor (or recorded interview) mic → short WAV → Groq Whisper (`STT_PROVIDER=groq`) → text.
-- LLM replies are **text**. No patient TTS. No Gemini Live.
-- Full **transcript** stored in Postgres; no audio files in MVP.
+- Default `VOICE_MODE=speech_to_speech`. `chained` still supported (forces lamp off).
+- **Lamp ON:** Gemini Live (browser ↔ Live; short-lived token from API).
+- **Lamp OFF:** STT (Groq) → LLM → patient TTS (ElevenLabs or browser). Never opens Live.
+- Recorded Interview tab: capture → STT only (no talking patient).
+- Full **transcript** in Postgres; no audio files in MVP.
 - Text composer always available.
+- Spec: `docs/superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`.
 
 ## Chat / simulation UX (listening)
 
-- Optional recorder control (start/stop). Not a required per-turn mic.
-- Phase 2 may add VAD hands-free / Live; do not block MVP.
-- iOS: the Start recording tap is the user gesture that unlocks the mic.
-- Cold API: **Waking up…** before recorder or send is usable.
+- Status row: Live/TTS lamp left · Ready/Listening center · Głos pacjenta + Słuchanie dots right.
+- Optional Listening (on/off). Not push-to-talk as the only path.
+- iOS: turning Listening **on** (or Start recording) is the user gesture that unlocks the mic.
+- Mute Listening while the patient speaks (TTS or Live).
+- Cold API: **Uruchamianie API…** before recorder or send is usable.
 
 ## Admin
 

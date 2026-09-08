@@ -18,10 +18,14 @@ Placeholders only. Copy `.env.example` â†’ `.env` and `frontend/.env.example` â†
 | `TEXT_PROVIDER` | Text LLM adapter (`openrouter`). |
 | `TEXT_MODEL` | OpenRouter slug (default `google/gemini-2.5-flash-lite`). |
 | `OPENROUTER_API_KEY` | OpenRouter. |
-| `VOICE_MODE` | MVP: `chained`. |
+| `VOICE_MODE` | `speech_to_speech` (Live allowed) or `chained` (lamp forced off). |
+| `GOOGLE_API_KEY` | Gemini Live / Google. |
 | `STT_PROVIDER` | `groq` (default). |
 | `GROQ_API_KEY` | Groq Whisper. |
 | `OPENAI_API_KEY` | Optional STT fallback. |
+| `TTS_PROVIDER` | `elevenlabs` (product) or `browser`. |
+| `TTS_VOICE_ID` | ElevenLabs voice id (Polish patient). |
+| `ELEVENLABS_API_KEY` | ElevenLabs. |
 | `LANGFUSE_PUBLIC_KEY` | Langfuse Cloud. |
 | `LANGFUSE_SECRET_KEY` | Langfuse Cloud. |
 | `LANGFUSE_HOST` | Langfuse host (`https://cloud.langfuse.com`). |

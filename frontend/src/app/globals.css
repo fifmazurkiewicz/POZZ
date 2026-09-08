@@ -1,0 +1,72 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Lora:wght@400;600&display=swap");
+@import "tailwindcss";
+
+:root {
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-text: #201f1d;
+  --color-soft: color-mix(in srgb, #201f1d 55%, transparent);
+  --color-accent: #b68235;
+  --color-divider: color-mix(in srgb, #201f1d 16%, transparent);
+  --font-heading: "Cormorant Garamond", serif;
+  --font-body: "Lora", serif;
+}
+
+.dark {
+  --color-bg: #16130f;
+  --color-surface: #1e1a15;
+  --color-text: #f3f2f2;
+  --color-soft: color-mix(in srgb, #f3f2f2 55%, transparent);
+  --color-accent: #c28d41;
+  --color-divider: color-mix(in srgb, #f3f2f2 16%, transparent);
+}
+
+@theme inline {
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text);
+  --color-surface: var(--color-surface);
+  --color-accent: var(--color-accent);
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-heading);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+}
+
+.classical-btn {
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 1px solid var(--color-accent);
+  color: var(--color-text);
+  background: transparent;
+  border-radius: 4px;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+.nav-tab-link {
+  cursor: pointer;
+}
+
+.nav-tab-link:hover {
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+  color: var(--color-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

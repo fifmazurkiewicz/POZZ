@@ -16,4 +16,40 @@ jobs:
       - name: Gitleaks
         run: docker run --rm -v "${{ github.workspace }}:/src" ghcr.io/gitleaks/gitleaks:v8.28.0 detect --source=/src --verbose --redact --config=/src/.gitleaks.toml
 
-  # backend / frontend jobs land with greenfield Task 0 (pytest, promptfoo, lint, build).
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: pytest
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install and lint
+        run: |
+          npm ci
+          npm run lint
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build

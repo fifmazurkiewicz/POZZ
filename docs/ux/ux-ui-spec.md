@@ -10,8 +10,9 @@ Copy produktu jest **po polsku** (preserve). To nie jest aplikacja medyczna — 
 - **Wywiad** — nagranie jednego ujęcia (Start → Stop → przetwarzanie) **oraz** ręczny konstruktor linii Lekarz/Pacjent → podsumowanie i zalecenia.
 - **Menu → Sesje** — lista własnych wywiadów (symulacja / nagrany / ręczny) + szczegół.
 - Google OAuth, bramka akceptacji, Admin (cap, kolejka Accept, masowe generowanie pacjentów).
+- **Głos w Symulacji:** lampa Live Gemini (ON) vs TTS (OFF); transkrypt + composer zawsze. Spec: [`../superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`](../superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md).
 
-**Poza MVP (Etap 2):** TTS pacjenta, Gemini Live / VAD hands-free, podpowiedzi co 10 s podczas nagrania, diarization GPU, wipe bazy w UI, resume tej samej `conversation_id`.
+**Poza MVP (Etap 2):** podpowiedzi co 10 s podczas nagrania, diarization GPU, wipe bazy w UI, resume tej samej `conversation_id`.
 
 ## 2. Platforma
 
@@ -40,9 +41,11 @@ Zimny API: globalny banner **Waking up…** (ApiPulse), zanim czat/mikrofon są 
 
 - Pole **Słowa kluczowe** (opcjonalne) + **Następny pacjent**.
 - **Karta pacjenta** zwijana. First-time: imię, wiek, historia w punkcie = Nie. Returning: pełna karta. Scenariusz ukryty (nie pokazujemy gold planu ani pełnego HPI lekarzowi).
+- Chrome Symulacji (zablokowane, jak Langy Chat): nagłówek (skrót pacjenta + Następny) · **wiersz statusu** (lampa Live/TTS lewo · Ready/Słuchanie środek · kropki Głos pacjenta + Słuchanie prawo) · tylko transkrypt się scrolluje · composer + dolny pasek.
 - Transkrypt **zawsze widoczny** w aktywnej sesji (linie Lekarz / Pacjent / AI).
 - Radio trybu pod czatem: Lekarz | Pacjent | Dopytaj AI.
-- Composer: text input zawsze; przycisk nagrywania opcjonalny (start/stop WAV). Send → Stop gdy model pisze.
+- Composer: text input zawsze; Listening opcjonalne. Send → Stop gdy pacjent mówi lub model pisze.
+- Lampa: ON = Gemini Live; OFF = STT + TTS pacjenta. `VOICE_MODE=chained` wyłącza lampę. Preference w `localStorage`.
 - **Resetuj wywiad** — nowa konwersacja, ten sam pacjent.
 - **Zakończ wywiad** (gdy jest ≥ 1 tura) → textarea planu (leki / zalecenia / badania) + opcjonalny mic → **Wyślij** → ocena + expander złotego planu. **Spróbuj ponownie** wraca do textarea.
 

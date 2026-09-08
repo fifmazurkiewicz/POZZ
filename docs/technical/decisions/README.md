@@ -31,12 +31,18 @@ Short dated decisions. Living detail often lives in `docs/architecture-for-curso
 - Approval gate + monthly spend cap ($10, Europe/Warsaw)
 - Spec: `docs/superpowers/specs/2026-09-07-domain-user-journey-design.md`
 
-## 2026-09-07 — chained STT, no patient TTS in MVP
+## 2026-09-07 — chained STT only (superseded 2026-09-08)
 
-- Doctor mic optional; text always available
-- Groq Whisper default; LLM text replies
-- Gemini Live / patient TTS = Phase 2
-- Spec: `docs/superpowers/specs/2026-09-07-stack-deploy-design.md`
+- Originally: no patient TTS / no Live in MVP
+- **Superseded** by 2026-09-08 Live/TTS lamp
+
+## 2026-09-08 — Simulation Live vs TTS lamp
+
+- Lamp ON = Gemini Live; OFF = chained STT + patient TTS
+- `localStorage` `pozz-sim-live-gemini`; env `VOICE_MODE` still caps Live
+- Mute Listening while the patient speaks
+- Spec: `docs/superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`
+- Build order: `docs/superpowers/specs/2026-09-08-refactor-build-order-design.md`
 
 ## 2026-09-07 — user approval gate
 

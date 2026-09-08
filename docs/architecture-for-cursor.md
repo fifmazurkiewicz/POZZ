@@ -15,7 +15,9 @@ This is the **business + technical** project description for implementation. UX/
 - Google OAuth, admin approval gate, admin panel with **monthly** per-user spend cap — foundational at MVP.
 - Observability: **Langfuse** (tracing, cost, prompt management). Pre-deploy prompt regression: **promptfoo**.
 
-**Out of MVP:** patient TTS / speech-to-speech Live, diarization GPU pipeline (`diarization_test/`), storing audio blobs, public unauthenticated use, database wipe from the product UI (admin SQL / explicit later spec only).
+**Out of MVP:** diarization GPU pipeline (`diarization_test/`), storing audio blobs, public unauthenticated use, database wipe from the product UI (admin SQL / explicit later spec only), chunked live suggestions on recorded Interview.
+
+Voice **is** in MVP: patient TTS + Gemini Live switcher on Simulation (spec: [`superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`](./superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md)). Build order: [`superpowers/specs/2026-09-08-refactor-build-order-design.md`](./superpowers/specs/2026-09-08-refactor-build-order-design.md).
 
 ## 2. Streamlit as reference (no deploy)
 
@@ -60,8 +62,9 @@ POZZ codebase is **not** a Langy fork. Langy is the **process + stack template**
 | Frontend hosting | **Vercel** | |
 | Database + Auth | **Supabase** (Postgres, Google OAuth, RLS) | catalog + conversations + ledger + job queue |
 | Text LLM | OpenRouter adapter | Default `google/gemini-2.5-flash-lite` |
-| STT | Groq Whisper, fallback OpenAI/OpenRouter | `VOICE_MODE=chained` in MVP |
-| TTS / Live | **Not in MVP** | Text patient replies; doctor mic optional |
+| STT | Groq Whisper, fallback OpenAI/OpenRouter | Chained path when lamp OFF |
+| TTS | ElevenLabs (product) or browser | Patient replies spoken on chained path |
+| Live | Gemini Live via ephemeral token | Lamp ON; `VOICE_MODE=speech_to_speech` enables |
 | AI observability | **Langfuse Cloud** | Runtime SoT for prompts |
 | Prompt regression | **promptfoo** | Fixtures in repo; gate before deploy |
 | Async jobs | **Postgres** job table / polling | **No Redis in MVP** |
@@ -81,10 +84,13 @@ Requirement: switch providers without rewriting product logic. Config through en
 
 ### 4.3 Voice conversation (MVP)
 
-- **`VOICE_MODE=chained` (MVP default):** browser captures short WAV (user gesture) → `POST /api/stt` → text lands in the composer / as a user turn → LLM reply as text.
-- Listening is **optional**. Text input is always present. Not push-to-talk as the only path; a start/stop recorder is acceptable for MVP (prototype mic button). Hands-free VAD and Gemini Live are **Phase 2**.
-- **No patient TTS in MVP.** The simulated patient answers in text.
-- Render handles auth, spend checks, transcript persistence, jobs — not a media proxy for Live.
+Two paths, one Simulation lamp (Langy Chat metaphor; not a Langy fork):
+
+- **Lamp ON (`VOICE_MODE=speech_to_speech`):** Gemini Live. Browser ↔ Live after `GET /api/voice/live-token`. Render = auth, scenario agenda, spend, transcript persist — not the media proxy.
+- **Lamp OFF (chained):** doctor mic → `POST /api/stt` (or typed text) → LLM turn → patient **TTS** (`TTS_PROVIDER=elevenlabs|browser`). Never opens Live.
+- Env `VOICE_MODE=chained` forces the lamp off (`live_available=false` on `GET /api/voice/config`).
+- Preference: `localStorage` `pozz-sim-live-gemini` (default ON). Text input always present. Listening optional. Mute Listening while the patient speaks.
+- Spec: [`superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`](./superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md).
 
 ### 4.4 Langfuse + promptfoo
 
@@ -94,7 +100,7 @@ Requirement: switch providers without rewriting product logic. Config through en
 
 ### 4.5 Start recommendation
 
-Ship chained STT + text LLM. Prove the adapter with Groq as the first STT. Do not block MVP on Live.
+Ship **text simulation first** (Package 2), then chained STT+TTS (Package 3), then Live (Package 4). The PWA shell includes the lamp from Package 0 so chrome does not get retrofitted.
 
 ## 5. Domain model summary
 
@@ -257,9 +263,9 @@ RLS: `auth.uid() = user_id` on user-owned tables. `patients` readable by approve
 - Cap is **per calendar month**, TZ **Europe/Warsaw** (`SPEND_CAP_TZ`).
 - Default for new users: **`spend_cap_usd = 10`**.
 - `users.is_approved` (default false). New public signups wait for admin Accept before feature APIs; Accept does not overwrite `spend_cap_usd`. Spec: [`superpowers/specs/2026-09-07-user-approval-gate-design.md`](./superpowers/specs/2026-09-07-user-approval-gate-design.md).
-- Sum `usage_ledger.cost_usd` for current month vs cap. Counted: **ASR + GenAI** (TTS if added later).
+- Sum `usage_ledger.cost_usd` for current month vs cap. Counted: **TTS + ASR + GenAI**.
 - Admin can edit cap anytime.
-- **At cap:** block generate patient, simulation turns, STT, evaluation, recorded processing. User **may still** browse Sessions and read existing evaluations. Nothing deleted. Resets next calendar month.
+- **At cap:** block generate patient, simulation turns, STT, TTS, Live, evaluation, recorded processing. User **may still** browse Sessions and read existing evaluations. Nothing deleted. Resets next calendar month.
 
 ### 7.7 Approval gate
 
@@ -286,18 +292,17 @@ RLS: `auth.uid() = user_id` on user-owned tables. `patients` readable by approve
 
 ## 9. Build order (MVP)
 
-1. Greenfield scaffold: `backend/` + `frontend/` + Supabase + Render + Vercel + Google login + `/api/health` + ApiPulse.
-2. Schema: users, patients, conversations, messages, transcripts, ledger, jobs, RLS, `is_approved`.
-3. PWA shell (tabs, Classical, dark mode).
-4. Approval gate + admin Accept + spend-cap plumbing.
-5. Provider interfaces + Langfuse; OpenRouter + Groq STT.
-6. Patient generate / next / card parse + Simulation chat (text).
-7. End interview evaluation + Sessions list.
-8. Mic STT on simulation turns.
-9. Recorded interview upload + process; Manual interview.
-10. Admin bulk generate + spend-cap UI.
-11. promptfoo suites in CI for critical prompts.
-12. Optional later: Live / patient TTS / chunked suggestions / diarization.
+SoT: [`superpowers/specs/2026-09-08-refactor-build-order-design.md`](./superpowers/specs/2026-09-08-refactor-build-order-design.md).
+
+0. Scaffold: FastAPI health + voice config, Next.js PWA tabs, ApiPulse, Live/TTS lamp chrome.
+1. Schema + auth + AuthGate.
+2. Simulation **text** (next patient, card, modes, turns).
+3. Chained STT + patient TTS; mute Listening during TTS.
+4. Gemini Live + lamp wiring (token, disconnect on lamp OFF).
+5. End interview evaluation.
+6. Recorded + manual Interview tab.
+7. Sessions + Admin (approval, cap, bulk generate).
+8. promptfoo suites in CI.
 
 ## 10. Known risks
 

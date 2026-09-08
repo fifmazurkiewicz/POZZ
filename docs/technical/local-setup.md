@@ -3,8 +3,8 @@
 ## Prerequisites
 
 - Python 3.12+
-- Node.js 22+ (after greenfield frontend exists; Supabase JS requires `>=22`)
-- Postgres (local) **or** Supabase Cloud dev project
+- Node.js 22+
+- Postgres (local) **or** Supabase Cloud (needed from Package 1)
 - `uv` optional for the Streamlit prototype
 
 ## 1. Environment
@@ -32,28 +32,15 @@ Open http://localhost:8501 — tabs Symulacja / Wywiad / Przeglądanie / Admin. 
 
 This path is **not** the production deploy. Do not point Vercel or Render at `app.py`.
 
-## 3. Database (greenfield)
-
-After Task 0, apply `supabase/migrations/001_initial.sql` in Supabase SQL editor, **or** locally:
+## 3. Greenfield API + PWA (Package 0)
 
 ```bash
 cd backend
 python -m pip install -r requirements.txt
-# set DATABASE_URL in .env (Postgres)
-python -m scripts.create_tables
-```
-
-## 4. Backend (greenfield)
-
-```bash
-cd backend
 uvicorn app.main:app --reload --port 8000
 curl http://localhost:8000/api/health
+# {"status":"ok","service":"pozz"}
 ```
-
-Expected: `{"status":"ok","service":"pozz"}`.
-
-## 5. Frontend (greenfield)
 
 ```bash
 cd frontend
@@ -61,23 +48,24 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000 — Login (dev) → waiting screen until admin Accept (allowlist / `dev-token` auto-approved on first insert) → Simulation / Interview / Menu.
+Open http://localhost:3000 — redirects to Symulacja. Bottom nav: Symulacja / Wywiad / Menu. Lamp on the status row (Live vs TTS preference). Banner „Uruchamianie API…” until health is 200.
 
-## 6. Smoke test (greenfield, once scaffold exists)
+Auth, next-patient, and spoken audio are later packages.
 
-1. Health returns `{"status":"ok","service":"pozz"}`
-2. Sign in → approved
-3. Simulation → Next patient → one text turn → End interview → write a plan → see evaluation
-4. Sessions lists that conversation
+## 4. Smoke test (Package 0)
 
-## 7. Supabase OAuth redirect URLs
+1. `GET /api/health` returns `{"status":"ok","service":"pozz"}`
+2. `GET /api/voice/config` includes `live_available: true` when `VOICE_MODE=speech_to_speech`
+3. Frontend `/simulation` shows the lamp; toggle persists in `localStorage` (`pozz-sim-live-gemini`)
+
+## 5. Supabase OAuth redirect URLs
 
 Add to Supabase → Authentication → URL Configuration → **Redirect URLs**:
 
 - `https://pozz.fmazurkiewicz.dev/auth/callback`
 - `http://localhost:3000/auth/callback` (local)
 
-## 8. Production alignment
+## 6. Production alignment
 
 - Frontend: Vercel (`pozz.fmazurkiewicz.dev`)
 - Backend: Render Docker (`api-pozz.fmazurkiewicz.dev`)

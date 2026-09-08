@@ -8,32 +8,27 @@
 | Backend | **Render** (FastAPI / Docker) |
 | Database + Auth | **Supabase** (Postgres, Google OAuth, RLS) |
 
-Voice/text: OpenRouter (text) + Groq Whisper STT (chained). Langfuse Cloud = prompt SoT. No Redis in MVP. Domains: `pozz` / `api-pozz`.fmazurkiewicz.dev — see `docs/architecture-for-cursor.md`.
+Voice/text: OpenRouter (text) + Groq Whisper STT + patient TTS; Gemini Live when lamp ON (`VOICE_MODE=speech_to_speech`). Langfuse Cloud = prompt SoT. No Redis in MVP. Domains: `pozz` / `api-pozz`.fmazurkiewicz.dev — see `docs/architecture-for-cursor.md`.
 
 **Legacy:** root `app.py` + `modules/` is a Streamlit prototype (AWS Secrets Manager + cloudflared). It is **reference only** — not the production deploy target. New product code lives in `backend/` + `frontend/` after greenfield Task 0.
 
 ## Commands
 
 ```bash
-# Legacy Streamlit (local reference only — not Vercel/Render)
-# cp .env.example .env   # fill DATABASE_URL + OPENROUTER_API_KEY
-# uv sync && uv run streamlit run app.py --server.port 8501
-
-# Greenfield backend (after Task 0 scaffold exists)
+# Backend
 cd backend && python -m pip install -r requirements.txt
-cd backend && python -m scripts.create_tables   # local Postgres
 cd backend && uvicorn app.main:app --reload --port 8000
 cd backend && python -m pytest
-cd backend && npm install && npm run promptfoo   # mock provider, no API keys
 
-# Greenfield frontend (after Task 0 scaffold exists)
+# Frontend
 cd frontend && npm install && npm run dev
 cd frontend && npm run lint && npm test && npm run build
 
 # Health: GET http://localhost:8000/api/health
+# Voice: GET http://localhost:8000/api/voice/config
 ```
 
-Until Task 0 lands, `backend/` and `frontend/` contain agent notes only — do not invent a second Streamlit deploy path.
+Package 0 scaffold lives in `backend/` and `frontend/`. Do not add product features to `app.py`.
 
 Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empty so the frontend sends `dev-token`, and set `DEV_AUTH_ENABLED=true` (with empty `SUPABASE_URL`) so the backend accepts it. Production rejects `dev-token`.
 
@@ -59,7 +54,8 @@ Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empt
 - Product UI language is always Polish. Agent chat, identifiers, commits, and docs the agent writes are English.
 - Stack must match `deployment-standard.mdc`: Vercel + Render + Supabase. Do not reintroduce AWS EC2, Secrets Manager, or cloudflared quick tunnels as the production path.
 - Native language of doctors using the app is Polish; simulated patients speak Polish; LLM prompts force Polish output.
-- Chat always has a text input; voice is optional (mic → STT). Patient replies are text in MVP (no patient TTS unless a later spec adds it).
+- Chat always has a text input. Simulation lamp: ON = Gemini Live, OFF = chained STT + patient TTS. Mute Listening while the patient speaks. Spec: `docs/superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`.
+- Next work after scaffold: schema + auth → text simulation → chained voice → Live → evaluation → Interview tab → admin. SoT: `docs/superpowers/specs/2026-09-08-refactor-build-order-design.md`.
 - Simulation modes: doctor asks / patient asks / ask the AI (meta). End interview → doctor writes treatment plan → LLM evaluation vs hidden gold plan.
 - Recorded interview (real audio) is a separate surface from the simulated patient chat.
 - New public signups wait on `AuthGate` until admin Accept (`users.is_approved`); allowlist / local `dev-token` auto-approved on insert only.
