@@ -2,6 +2,7 @@ from fastapi.responses import JSONResponse
 
 from fastapi import APIRouter
 
+from app.db import ping_database
 from app.settings import get_settings
 
 router = APIRouter()
@@ -17,7 +18,7 @@ def health() -> dict[str, str]:
 def ready():
     """Readiness — requires DATABASE_URL in Package 0 (no live ping yet)."""
     settings = get_settings()
-    if not settings.database_url:
+    if not settings.database_url or not ping_database():
         return JSONResponse(
             status_code=503,
             content={"status": "degraded", "checks": {"database": "error"}},

@@ -82,3 +82,19 @@ export function useApiPulse(): ApiPulseContextValue {
   if (!ctx) throw new Error("useApiPulse must be used within ApiPulseProvider");
   return ctx;
 }
+
+/** Run callback once each time the API transitions from unhealthy → healthy. */
+export function useOnApiHealthy(callback: () => void) {
+  const { isHealthy } = useApiPulse();
+  const wasHealthyRef = useRef(isHealthy);
+
+  useEffect(() => {
+    if (isHealthy && !wasHealthyRef.current) {
+      wasHealthyRef.current = true;
+      queueMicrotask(callback);
+    }
+    if (!isHealthy) {
+      wasHealthyRef.current = false;
+    }
+  }, [isHealthy, callback]);
+}
