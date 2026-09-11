@@ -230,6 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     clearSession();
     finishInit();
+    window.location.assign("/login");
   }, [clearSession, finishInit]);
 
   const status: AuthStatus = useMemo(() => {

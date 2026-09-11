@@ -11,6 +11,9 @@ export default function MenuPage() {
       <h1 className="text-lg">Menu</h1>
       {email ? <p className="mt-3 text-sm text-[var(--color-soft)]">{email}</p> : null}
       <div className="mt-5 flex flex-col gap-2">
+        <Link className="classical-btn flex items-center" href="/menu/sessions">
+          Historia rozmów
+        </Link>
         {isAdmin ? (
           <Link className="classical-btn flex items-center" href="/menu/admin">
             Administracja

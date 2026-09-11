@@ -97,6 +97,20 @@ def test_admin_accepts_user_without_changing_cap(sqlite_client: TestClient, db_s
     assert float(refreshed.spend_cap_usd) == 10
 
 
+def test_admin_can_update_user_monthly_spend_cap(sqlite_client: TestClient, db_session: Session):
+    admin = _user(email=ADMIN_EMAIL, is_admin=True, is_approved=True)
+    user = _user(email="cap@example.com", is_approved=True)
+    db_session.add_all([admin, user])
+    db_session.commit()
+    _override(sqlite_client, admin)
+
+    response = sqlite_client.patch(f"/api/admin/users/{user.id}", json={"spend_cap_usd": 25.5})
+    assert response.status_code == 200, response.text
+    assert response.json()["spend_cap_usd"] == 25.5
+    db_session.refresh(user)
+    assert float(user.spend_cap_usd) == 25.5
+
+
 def test_admin_cannot_self_revoke(sqlite_client: TestClient, db_session: Session):
     admin = _user(email=ADMIN_EMAIL, is_admin=True, is_approved=True)
     db_session.add(admin)

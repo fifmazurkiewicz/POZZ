@@ -3,12 +3,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.auth.deps import get_approved_user
 from app.db import get_db
 from app.llm.provider import get_text_provider
-from app.models import Message, User
+from app.models import Conversation, Message, User
 from app.patients.service import (
     ROLE_FOR_MODE,
     assert_under_cap,
@@ -18,6 +19,26 @@ from app.patients.service import (
 from app.prompts.simulation import create_simulation_prompt
 
 router = APIRouter()
+
+
+@router.get("")
+def list_conversations(
+    user: Annotated[User, Depends(get_approved_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    rows = db.scalars(
+        select(Conversation)
+        .options(joinedload(Conversation.patient), selectinload(Conversation.messages))
+        .where(Conversation.user_id == user.id)
+        .order_by(Conversation.created_at.desc())
+    ).unique().all()
+    return {
+        "conversations": [
+            conversation_payload(row, row.patient)
+            | {"created_at": row.created_at.isoformat() if row.created_at else None, "ended_at": row.ended_at.isoformat() if row.ended_at else None}
+            for row in rows
+        ]
+    }
 
 
 class TurnBody(BaseModel):

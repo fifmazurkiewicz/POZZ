@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { SimulationStatusRow } from "@/components/simulation/SimulationStatusRow";
 import { ApiError } from "@/lib/api";
@@ -8,6 +9,7 @@ import { apiUrl } from "@/lib/api";
 import {
   composerPlaceholder,
   fetchNextPatient,
+  fetchConversation,
   postTurn,
   speakerLabel,
   type SimMessage,
@@ -24,6 +26,7 @@ const MODES: { id: SimMode; label: string }[] = [
 
 export function SimulationClient() {
   const { token, getAccessToken } = useAuth();
+  const searchParams = useSearchParams();
   const [session, setSession] = useState<SimulationSession | null>(null);
   const [messages, setMessages] = useState<SimMessage[]>([]);
   const [mode, setMode] = useState<SimMode>("doctor_asks");
@@ -81,6 +84,19 @@ export function SimulationClient() {
       setBusy(false);
     }
   }
+
+  useEffect(() => { void (async () => {
+    const conversationId = searchParams.get("conversation");
+    if (!conversationId) return;
+    const access = await bearer();
+    if (!access) return;
+    setBusy(true); setError(null);
+    try {
+      const saved = await fetchConversation(access, conversationId);
+      setSession(saved); setMessages(saved.messages ?? []); setMode(saved.mode); setCardOpen(true);
+    } catch (err) { setError(err instanceof ApiError ? err.message : "Nie udało się otworzyć rozmowy."); }
+    finally { setBusy(false); }
+  })(); }, [searchParams, token]);
 
   async function onSend(event: FormEvent) { event.preventDefault(); await submitTurn(draft.trim()); }
 

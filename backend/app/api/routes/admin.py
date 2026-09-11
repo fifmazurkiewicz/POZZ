@@ -2,7 +2,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,8 @@ CANNOT_SELF_REVOKE_MESSAGE = "Nie możesz cofnąć akceptacji własnego konta."
 
 
 class PatchUserBody(BaseModel):
-    is_approved: bool
+    is_approved: bool | None = None
+    spend_cap_usd: float | None = Field(default=None, ge=0, le=10_000)
 
 
 def _user_payload(user: User) -> dict:
@@ -28,6 +29,7 @@ def _user_payload(user: User) -> dict:
         "display_name": user.display_name,
         "is_admin": user.is_admin,
         "is_approved": user.is_approved,
+        "spend_cap_usd": float(user.spend_cap_usd),
         "created_at": created,
     }
 
@@ -56,7 +58,10 @@ def patch_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": CANNOT_SELF_REVOKE_CODE, "message": CANNOT_SELF_REVOKE_MESSAGE},
         )
-    target.is_approved = body.is_approved
+    if body.is_approved is not None:
+        target.is_approved = body.is_approved
+    if body.spend_cap_usd is not None:
+        target.spend_cap_usd = body.spend_cap_usd
     db.commit()
     db.refresh(target)
     return _user_payload(target)

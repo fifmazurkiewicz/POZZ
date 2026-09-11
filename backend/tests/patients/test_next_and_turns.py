@@ -46,6 +46,17 @@ def test_get_conversation_omits_hidden_scenario(sqlite_client: TestClient):
     assert body["messages"] == []
 
 
+def test_list_conversations_returns_current_users_history(sqlite_client: TestClient):
+    created = sqlite_client.post("/api/patients/next", headers=AUTH, json={})
+    assert created.status_code == 200
+    response = sqlite_client.get("/api/conversations", headers=AUTH)
+    assert response.status_code == 200
+    history = response.json()["conversations"]
+    assert len(history) == 1
+    assert history[0]["conversation_id"] == created.json()["conversation_id"]
+    assert "scenario" not in str(history[0])
+
+
 def test_text_turn_persists_user_and_assistant(sqlite_client: TestClient, db_session: Session):
     created = sqlite_client.post("/api/patients/next", headers=AUTH, json={})
     conversation_id = created.json()["conversation_id"]
