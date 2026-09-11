@@ -67,8 +67,11 @@ Add to Supabase → Authentication → URL Configuration → **Redirect URLs**:
 
 ## 6. Production alignment
 
+Step-by-step cutover: [production-deploy.md](./production-deploy.md).
+
 - Frontend: Vercel (`pozz.fmazurkiewicz.dev`)
 - Backend: Render Docker (`api-pozz.fmazurkiewicz.dev`)
 - `DATABASE_URL` via Supavisor pooler on Render
 - `SPEND_CAP_TZ=Europe/Warsaw`
 - Render Root Directory `backend`, Runtime **Docker**
+- Render `CORS_ORIGINS` includes `https://pozz.fmazurkiewicz.dev`

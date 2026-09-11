@@ -18,6 +18,7 @@ describe("resolveRedirect", () => {
     expect(resolveRedirect("ready", "/")).toBe("/simulation");
     expect(resolveRedirect("ready", "/simulation")).toBeNull();
     expect(resolveRedirect("ready", "/menu")).toBeNull();
+    expect(resolveRedirect("ready", "/menu/admin")).toBeNull();
   });
 });
 

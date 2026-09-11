@@ -14,6 +14,7 @@ Living contract for the product. Code follows these docs (spec-driven).
 | [ux/ux-ui-spec.md](./ux/ux-ui-spec.md) | UX contract (behavior) |
 | [ux/ux-ui-decisions.md](./ux/ux-ui-decisions.md) | Classical DS + screen decisions |
 | [technical/local-setup.md](./technical/local-setup.md) | Local run without Docker |
+| [technical/production-deploy.md](./technical/production-deploy.md) | Production cutover: Supabase → Render → Cloudflare → Vercel |
 | [technical/configuration.md](./technical/configuration.md) | Env **names** (no secret values) |
 
 ## Folders
@@ -25,6 +26,7 @@ docs/
   technical/
     decisions/
     local-setup.md
+    production-deploy.md
     configuration.md
   ux/
     ux-ui-spec.md

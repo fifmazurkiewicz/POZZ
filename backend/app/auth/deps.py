@@ -14,6 +14,8 @@ security = HTTPBearer(auto_error=False)
 
 ACCOUNT_PENDING_CODE = "account_pending_approval"
 ACCOUNT_PENDING_MESSAGE = "Konto oczekuje na akceptację administratora."
+ADMIN_REQUIRED_CODE = "admin_required"
+ADMIN_REQUIRED_MESSAGE = "Wymagane uprawnienia administratora."
 
 
 def require_approved(user: User) -> User:
@@ -69,3 +71,18 @@ def get_approved_user(
     user: Annotated[User, Depends(get_current_user)],
 ) -> User:
     return require_approved(user)
+
+
+def require_admin(user: User) -> User:
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": ADMIN_REQUIRED_CODE, "message": ADMIN_REQUIRED_MESSAGE},
+        )
+    return user
+
+
+def get_admin_user(
+    user: Annotated[User, Depends(get_approved_user)],
+) -> User:
+    return require_admin(user)

@@ -17,3 +17,7 @@ todos:
 
 Canonical: [`docs/superpowers/plans/2026-09-08-package-0-scaffold.md`](../../docs/superpowers/plans/2026-09-08-package-0-scaffold.md).
 Voice spec: [`docs/superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`](../../docs/superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md).
+
+## Decisions
+
+- **2026-09-11 — production runbook.** Operator SoT is `docs/technical/production-deploy.md`. Stack unchanged. Render must set `CORS_ORIGINS=https://pozz.fmazurkiewicz.dev`.

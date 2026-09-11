@@ -1,27 +1,43 @@
-# Graft (all repos)
+---
+description: Use the Graft context graph in graft/ before exploring source
+alwaysApply: true
+---
+## Graft — repo context graph
 
-[Graft](https://github.com/nanonets/graft) — local context graph for the agent. Greenfield and brownfield. Zero runtime impact.
+This repo is indexed in `graft/`: small linked markdown nodes that explain each
+system and carry exact file:line spans, kept in sync with the code through git.
 
-## Obligation
+For ANY task here — understanding how something works, finding where code lives,
+or scoping a change — get context from the graph before grepping or opening
+source files. Re-ask freely (it's cheap) and reuse literal identifiers you
+already have (symbol, error string, file name) as the query. New to this repo?
+Run `graft map` first — a token-budgeted orientation (dir clusters, hubs,
+hotspots), no LLM, no key.
 
-Before grep / reading many files: `graft map` (new / unknown repo) or `graft ask "<question>" --source` / MCP. Exhaustive: `graft grep`. Blast radius: `graft callers <symbol> --depth N`.
+- Run `graft ask "<your question>" --source` → ranked nodes with the relevant
+  code spans inlined (each hit's ≤8-line crux by default; `--full` for whole
+  definitions when the crux isn't enough). Match the tool to the task shape:
+  for understanding or editing, the top node IS the answer — cite its
+  `covers:` file:line spans and edit straight from `--source`. For
+  exhaustive tasks ("every occurrence / every caller of this pattern"), ranked
+  results are top-N, not complete — run `graft grep "<literal>"` instead
+  (exhaustive over indexed files, grouped by enclosing symbol), falling back
+  to raw `grep -rn` only for unindexed files.
+- `graft skeleton <file>` → every definition's signature + span, ~10× cheaper
+  than reading the file; use it to skim an API surface.
+- `graft callers <symbol>` gives precomputed, exact edges — who calls this.
+  Add `--direction out` for what it calls, or `--depth N` to walk
+  transitively for the full blast radius. For structural questions, skip
+  ranking and use this directly.
+- Or browse: `graft/INDEX.md` lists every node; follow the links.
+- Monorepos and folders of multiple repos rank fairly across sub-projects —
+  hits carry `[scope/]` labels naming which one they're from. Narrow with
+  `graft ask "<task>" --in <scope>/` once you know where you're working.
 
-If wiring or `graft/` is missing — **bootstrap first** (below), then map.
+If a returned span is truncated ("+N more lines"), open the file at that exact
+range before finalizing. Only open source files when a node genuinely lacks a
+needed detail, and then at the exact file:line the node points to — never
+re-read whole files.
 
-## Bootstrap (new or unwired repo)
-
-Do this early in the first session (or when hygiene gaps are filled):
-
-1. `npx @nanonets/graft init --agents cursor --dry-run` → then without `--dry-run` (no TTY: always `--agents cursor`).
-2. `graft telemetry disable`.
-3. Ensure `.gitignore` has `/graft/` (never commit the cache). Commit wiring only: `.cursor/rules/graft.mdc`, `.cursor/mcp.json`.
-4. Structural `graft build` ($0, no key). `--deep` only intentionally; key local, never in chat.
-5. If native install fails (e.g. Windows missing VS C++ / node-gyp): keep manual wiring (rule + MCP + gitignore); note the gap in `AGENTS.md`; retry after build tools exist.
-
-## `graft build` (periodically)
-
-Queries refresh structure themselves (~3 ms). Full rebuild: start of session when `graft check` drifts; after merge / large refactor / many files; when ask/callers look stale. Not after every line.
-
-## Hygiene
-
-Don't commit `graft/`. Don't require Graft in CI or on Vercel/Render. Don't read `.env` under `--deep`.
+After big code changes, refresh the graph with `graft build` (deterministic,
+no API key, $0).

@@ -44,6 +44,12 @@ Short dated decisions. Living detail often lives in `docs/architecture-for-curso
 - Spec: `docs/superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`
 - Build order: `docs/superpowers/specs/2026-09-08-refactor-build-order-design.md`
 
+## 2026-09-11 — production deploy runbook
+
+- Operator SoT: `docs/technical/production-deploy.md` (Supabase → schema → Google OAuth → Render → `api-pozz` DNS-only → Vercel → `pozz` CNAME)
+- `CORS_ORIGINS` is required on Render (`https://pozz.fmazurkiewicz.dev`); documented in `configuration.md`
+- Hosting choices unchanged (Vercel / Render Docker / Supabase)
+
 ## 2026-09-07 — user approval gate
 
 - `users.is_approved`; new signups wait until admin Accept

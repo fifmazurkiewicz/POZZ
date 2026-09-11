@@ -282,10 +282,12 @@ RLS: `auth.uid() = user_id` on user-owned tables. `patients` readable by approve
 
 ## 8. Deployment
 
+Operator runbook (click-by-click): [`technical/production-deploy.md`](./technical/production-deploy.md).
+
 - Frontend: Vercel → **`pozz.fmazurkiewicz.dev`**.
 - Backend: Render Docker Free → **`api-pozz.fmazurkiewicz.dev`**. Expect spin-down; UI shows waking state; never rely on in-memory jobs.
 - Supabase: Postgres + Google OAuth + RLS; pooler URL on Render.
-- Env: providers, Langfuse, `SPEND_CAP_TZ`, `ALLOWED_ADMIN_EMAILS`, `VOICE_MODE`.
+- Env: providers, Langfuse, `SPEND_CAP_TZ`, `ALLOWED_ADMIN_EMAILS`, `VOICE_MODE`, `CORS_ORIGINS`.
 - No Redis service required for MVP.
 - Cloudflare: `pozz` CNAME to Vercel; `api-pozz` CNAME to Render DNS-only — separate records.
 - Google OAuth callback `/auth/callback` with **server-side PKCE** (not client-side on `/`).

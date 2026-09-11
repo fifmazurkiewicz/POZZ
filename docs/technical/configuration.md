@@ -11,6 +11,7 @@ Placeholders only. Copy `.env.example` â†’ `.env` and `frontend/.env.example` â†
 | `SUPABASE_SERVICE_ROLE_KEY` | Server role key (template). |
 | `SUPABASE_JWT_SECRET` | Optional legacy HS256; unused when JWKS via `SUPABASE_URL`. |
 | `DEV_AUTH_ENABLED` | Accept `dev-token` / unsigned JWTs. **Never** set on Render. Ignored when `SUPABASE_URL` is set. |
+| `CORS_ORIGINS` | Comma-separated browser origins. Local default `http://localhost:3000,http://127.0.0.1:3000`. Render must include `https://pozz.fmazurkiewicz.dev`. |
 | `DATABASE_URL` | Postgres. Local: `localhost:5432`. Render: Supavisor pooler (not `db.<ref>.supabase.co`). |
 | `REDIS_URL` | Optional; not required for MVP (Postgres jobs). |
 | `SPEND_CAP_TZ` | Calendar month for spend cap (`Europe/Warsaw`). |
