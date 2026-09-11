@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 
 export default function MenuPage() {
@@ -9,10 +10,13 @@ export default function MenuPage() {
     <main className="flex-1 px-4 py-6">
       <h1 className="text-lg">Menu</h1>
       {email ? <p className="mt-3 text-sm text-[var(--color-soft)]">{email}</p> : null}
-      <p className="mt-3 text-sm text-[var(--color-soft)]">
-        Sesje i Admin pojawią się w kolejnym pakiecie.
-        {isAdmin ? " Masz uprawnienia administratora." : ""}
-      </p>
+      <div className="mt-5 flex flex-col gap-2">
+        {isAdmin ? (
+          <Link className="classical-btn flex items-center" href="/menu/admin">
+            Administracja
+          </Link>
+        ) : null}
+      </div>
       <button type="button" className="classical-btn mt-6" onClick={() => void signOut()}>
         Wyloguj
       </button>

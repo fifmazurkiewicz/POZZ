@@ -1,0 +1,22 @@
+import { apiFetch } from "@/lib/api";
+
+export type AdminUser = {
+  id: string;
+  email: string | null;
+  display_name: string | null;
+  is_admin: boolean;
+  is_approved: boolean;
+  created_at: string | null;
+};
+
+export async function fetchAdminUsers(token: string): Promise<AdminUser[]> {
+  return (await apiFetch<{ users: AdminUser[] }>("/api/admin/users", { token })).users;
+}
+
+export function updateUserApproval(token: string, userId: string, isApproved: boolean): Promise<AdminUser> {
+  return apiFetch<AdminUser>(`/api/admin/users/${userId}`, {
+    method: "PATCH",
+    token,
+    body: { is_approved: isApproved },
+  });
+}

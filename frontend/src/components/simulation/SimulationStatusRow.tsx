@@ -12,11 +12,17 @@ type VoiceConfig = {
   live_available: boolean;
 };
 
-export function SimulationStatusRow() {
+type Props = {
+  patientVoice: boolean;
+  listening: boolean;
+  disabled?: boolean;
+  onPatientVoiceChange: (enabled: boolean) => void;
+  onListeningChange: (enabled: boolean) => void;
+};
+
+export function SimulationStatusRow({ patientVoice, listening, disabled, onPatientVoiceChange, onListeningChange }: Props) {
   const [liveGemini, setLiveGemini] = useState(() => readLiveGeminiPreference());
   const [liveAvailable, setLiveAvailable] = useState(true);
-  const [patientVoice, setPatientVoice] = useState(true);
-  const [listening, setListening] = useState(false);
 
   useEffect(() => {
     const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -50,7 +56,8 @@ export function SimulationStatusRow() {
           className="flex h-11 w-11 items-center justify-center"
           aria-label="Głos pacjenta"
           aria-pressed={patientVoice}
-          onClick={() => setPatientVoice((v) => !v)}
+          disabled={disabled}
+          onClick={() => onPatientVoiceChange(!patientVoice)}
           title="Głos pacjenta"
         >
           <span className={`h-2.5 w-2.5 rounded-full ${voiceDotFillClass(patientVoice)}`} />
@@ -60,7 +67,8 @@ export function SimulationStatusRow() {
           className="flex h-11 w-11 items-center justify-center"
           aria-label="Słuchanie"
           aria-pressed={listening}
-          onClick={() => setListening((v) => !v)}
+          disabled={disabled}
+          onClick={() => onListeningChange(!listening)}
           title="Słuchanie"
         >
           <span className={`h-2.5 w-2.5 rounded-full ${voiceDotFillClass(listening)}`} />
