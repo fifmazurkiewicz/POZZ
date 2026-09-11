@@ -28,9 +28,13 @@ def get_engine() -> Engine:
     global _engine, _SessionLocal
     if _engine is None:
         settings = get_settings()
-        url = settings.database_url
-        if not url:
+        database_url = settings.database_url
+        if not database_url:
             raise RuntimeError("DATABASE_URL is not set")
+        # Supabase supplies standard ``postgresql://`` pooler URLs. SQLAlchemy
+        # otherwise selects its legacy psycopg2 dialect, while this application
+        # installs Psycopg 3 (``psycopg``).
+        url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
         kwargs: dict = {}
         if url.startswith("sqlite"):
             kwargs = {
