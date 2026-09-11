@@ -46,6 +46,7 @@ class Patient(Base):
     treatment_plan: Mapped[str | None] = mapped_column(Text, nullable=True)
     keywords: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_first_time: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_private: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class Conversation(Base):

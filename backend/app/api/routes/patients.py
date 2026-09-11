@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import get_approved_user
 from app.db import get_db
-from app.models import User
+from app.models import Conversation, Patient, User
 from app.patients.service import (
     assert_under_cap,
     conversation_payload,
@@ -19,6 +19,11 @@ router = APIRouter()
 
 class NextPatientBody(BaseModel):
     keywords: str | None = Field(default=None, max_length=500)
+
+
+class ManualInterviewBody(BaseModel):
+    scenario: str = Field(min_length=20, max_length=12_000)
+    title: str | None = Field(default=None, max_length=120)
 
 
 @router.post("/next")
@@ -34,3 +39,32 @@ def next_patient(
     payload = conversation_payload(conv, patient)
     payload.pop("messages", None)
     return payload
+
+
+@router.post("/manual")
+def create_manual_interview(
+    body: ManualInterviewBody,
+    user: Annotated[User, Depends(get_approved_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    """Create a private, user-authored practice case for the Interview workspace."""
+    title = body.title.strip() if body.title and body.title.strip() else "Ręcznie utworzony przypadek"
+    patient = Patient(
+        created_by=user.id,
+        scenario=body.scenario.strip(),
+        summary=title,
+        is_private=True,
+    )
+    db.add(patient)
+    db.flush()
+    conversation = Conversation(
+        user_id=user.id,
+        patient_id=patient.id,
+        kind="manual_interview",
+        title=title,
+        mode="doctor_asks",
+    )
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
+    return conversation_payload(conversation, patient)

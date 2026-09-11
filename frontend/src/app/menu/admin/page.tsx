@@ -50,8 +50,8 @@ export default function AdminPage() {
   }
 
   const { pending, approved } = partitionAdminUsers(users);
-  return <main className="flex-1 px-4 py-6">
-    <div className="flex items-center justify-between"><h1 className="text-2xl">Administracja</h1><Link className="text-sm underline" href="/menu">Menu</Link></div>
+  return <main className="app-page flex-1">
+    <div className="flex items-center justify-between"><h1 className="text-3xl">Administracja</h1><Link className="classical-btn min-h-9 py-1 text-sm" href="/menu">Menu</Link></div>
     {error ? <p className="mt-4 text-sm text-amber-700" role="alert">{error}</p> : null}
     <p className="mt-3 text-sm text-[var(--color-soft)]">Ustaw miesięczny limit wydatków dla każdego konta. Wartość 0 oznacza brak limitu.</p>
     <UserSection title="Oczekujące konta" empty="Brak kont oczekujących na akceptację." rows={pending} selfId={userId} busyId={busyId} onSetApproval={setApproval} onSetSpendCap={setSpendCap} />
