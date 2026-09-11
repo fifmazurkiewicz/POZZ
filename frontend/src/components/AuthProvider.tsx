@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ApiError, apiFetch, setPendingApprovalListener } from "@/lib/api";
 import { useOnApiHealthy } from "@/components/ApiPulseProvider";
 import { clearOAuthRedirectParams, hasPendingOAuthRedirect } from "@/lib/auth/oauth";
@@ -43,6 +44,7 @@ function createInitGate() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const devMode = isDevAuthMode();
   const initGateRef = useRef(createInitGate());
   const [sessionResolved, setSessionResolved] = useState(devMode);
@@ -230,8 +232,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     clearSession();
     finishInit();
-    window.location.assign("/login");
-  }, [clearSession, finishInit]);
+    router.replace("/login");
+  }, [clearSession, finishInit, router]);
 
   const status: AuthStatus = useMemo(() => {
     if (!sessionResolved) return "initializing";

@@ -88,7 +88,7 @@ export function SimulationClient() {
   useEffect(() => { void (async () => {
     const conversationId = searchParams.get("conversation");
     if (!conversationId) return;
-    const access = await bearer();
+    const access = token ?? await getAccessToken();
     if (!access) return;
     setBusy(true); setError(null);
     try {
@@ -96,7 +96,7 @@ export function SimulationClient() {
       setSession(saved); setMessages(saved.messages ?? []); setMode(saved.mode); setCardOpen(true);
     } catch (err) { setError(err instanceof ApiError ? err.message : "Nie udało się otworzyć rozmowy."); }
     finally { setBusy(false); }
-  })(); }, [searchParams, token]);
+  })(); }, [getAccessToken, searchParams, token]);
 
   async function onSend(event: FormEvent) { event.preventDefault(); await submitTurn(draft.trim()); }
 

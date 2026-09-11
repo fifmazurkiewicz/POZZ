@@ -6,7 +6,7 @@ export type AdminUser = {
   display_name: string | null;
   is_admin: boolean;
   is_approved: boolean;
-  spend_cap_usd: number;
+  spend_cap_usd?: number;
   created_at: string | null;
 };
 
