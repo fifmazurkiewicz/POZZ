@@ -1,3 +1,4 @@
+import re
 from typing import Annotated
 
 import httpx
@@ -12,6 +13,7 @@ from app.patients.service import assert_under_cap
 from app.settings import get_settings
 
 router = APIRouter()
+VOICE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 @router.get("/config")
@@ -71,14 +73,18 @@ async def patient_speech(
     if not text:
         raise HTTPException(status_code=400, detail="Missing text")
     settings = get_settings()
-    if settings.tts_provider.strip().lower() != "elevenlabs" or not settings.elevenlabs_api_key or not settings.tts_voice_id:
+    requested_voice_id = str(body.get("voice_id", "")).strip()
+    if requested_voice_id and not VOICE_ID_RE.fullmatch(requested_voice_id):
+        raise HTTPException(status_code=422, detail="Invalid voice_id")
+    voice_id = requested_voice_id or settings.tts_voice_id
+    if settings.tts_provider.strip().lower() != "elevenlabs" or not settings.elevenlabs_api_key or not voice_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "tts_unavailable", "message": "Głos pacjenta nie jest skonfigurowany."},
         )
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{settings.tts_voice_id}",
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
             headers={"xi-api-key": settings.elevenlabs_api_key, "Accept": "audio/mpeg"},
             json={"text": text[:5000], "model_id": "eleven_multilingual_v2", "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}},
         )

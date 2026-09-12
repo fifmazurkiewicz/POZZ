@@ -17,7 +17,7 @@ This is the **business + technical** project description for implementation. UX/
 
 **Out of MVP:** diarization GPU pipeline (`diarization_test/`), storing audio blobs, public unauthenticated use, database wipe from the product UI (admin SQL / explicit later spec only), chunked live suggestions on recorded Interview.
 
-Voice **is** in MVP: patient TTS + Gemini Live switcher on Simulation (spec: [`superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`](./superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md)). Build order: [`superpowers/specs/2026-09-08-refactor-build-order-design.md`](./superpowers/specs/2026-09-08-refactor-build-order-design.md).
+Voice **is** in MVP through chained STT + patient TTS. Menu contains the voice-mode preference, but the current product must show **Live unavailable** because no Gemini Live browser client/socket is implemented. The September 11 interview-controls design supersedes the earlier status-row lamp UX: [`superpowers/specs/2026-09-11-interview-controls-design.md`](./superpowers/specs/2026-09-11-interview-controls-design.md).
 
 ## 2. Streamlit as reference (no deploy)
 
@@ -62,9 +62,9 @@ POZZ codebase is **not** a Langy fork. Langy is the **process + stack template**
 | Frontend hosting | **Vercel** | |
 | Database + Auth | **Supabase** (Postgres, Google OAuth, RLS) | catalog + conversations + ledger + job queue |
 | Text LLM | OpenRouter adapter | Default `google/gemini-2.5-flash-lite` |
-| STT | Groq Whisper, fallback OpenAI/OpenRouter | Chained path when lamp OFF |
+| STT | Groq Whisper, fallback OpenAI/OpenRouter | Chained simulation and recorded-interview transcription |
 | TTS | ElevenLabs (product) or browser | Patient replies spoken on chained path |
-| Live | Gemini Live via ephemeral token | Lamp ON; `VOICE_MODE=speech_to_speech` enables |
+| Live | Planned Gemini Live browser integration | Not implemented; Menu shows Live unavailable and keeps TTS selected |
 | AI observability | **Langfuse Cloud** | Runtime SoT for prompts |
 | Prompt regression | **promptfoo** | Fixtures in repo; gate before deploy |
 | Async jobs | **Postgres** job table / polling | **No Redis in MVP** |
@@ -82,15 +82,14 @@ Requirement: switch providers without rewriting product logic. Config through en
 
 `transcribe(audio_bytes, language="pl") -> str`. Default Groq Whisper. Used for simulation mic turns and recorded-interview audio.
 
-### 4.3 Voice conversation (MVP)
+### 4.3 Voice conversation (current MVP)
 
-Two paths, one Simulation lamp (Langy Chat metaphor; not a Langy fork):
-
-- **Lamp ON (`VOICE_MODE=speech_to_speech`):** Gemini Live. Browser ↔ Live after `GET /api/voice/live-token`. Render = auth, scenario agenda, spend, transcript persist — not the media proxy.
-- **Lamp OFF (chained):** doctor mic → `POST /api/stt` (or typed text) → LLM turn → patient **TTS** (`TTS_PROVIDER=elevenlabs|browser`). Never opens Live.
-- Env `VOICE_MODE=chained` forces the lamp off (`live_available=false` on `GET /api/voice/config`).
-- Preference: `localStorage` `pozz-sim-live-gemini` (default ON). Text input always present. Listening optional. Mute Listening while the patient speaks.
-- Spec: [`superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`](./superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md).
+- The implemented path is chained: doctor mic → `POST /api/stt` (or typed text) → LLM turn → patient **TTS** (`TTS_PROVIDER=elevenlabs|browser`).
+- Voice-mode choice lives in Menu. TTS is selected; Live is visibly unavailable until a Gemini Live browser client/socket and transcript persistence are implemented.
+- Menu also stores an optional ElevenLabs voice ID in this browser. Empty means the server `TTS_VOICE_ID` default. Client and server accept only a voice ID, never a URL; browser speech fallback cannot use this override.
+- Text input is always present. Labeled microphone and speaker controls sit near the composer. Listening is suspended while patient speech plays.
+- **Stop** aborts the active browser request, stops ElevenLabs audio/browser speech and microphone capture, and discards unfinished input. A synchronous provider job already running on the server may continue after the browser request is aborted; its late response must not update the stopped UI operation.
+- Current interaction spec: [`superpowers/specs/2026-09-11-interview-controls-design.md`](./superpowers/specs/2026-09-11-interview-controls-design.md). The September 8 lamp design is historical for this UI.
 
 ### 4.4 Langfuse + promptfoo
 
@@ -100,7 +99,7 @@ Two paths, one Simulation lamp (Langy Chat metaphor; not a Langy fork):
 
 ### 4.5 Start recommendation
 
-Ship **text simulation first** (Package 2), then chained STT+TTS (Package 3), then Live (Package 4). The PWA shell includes the lamp from Package 0 so chrome does not get retrofitted.
+Ship **text simulation first** (Package 2), then chained STT+TTS (Package 3). Gemini Live remains later work; do not present configuration capability as an implemented browser connection.
 
 ## 5. Domain model summary
 
@@ -241,10 +240,18 @@ RLS: `auth.uid() = user_id` on user-owned tables. `patients` readable by approve
 ### 7.3 End interview + evaluation
 
 - Requires at least one user turn.
-- If `patients.treatment_plan` empty, generate once and persist on the patient.
-- Prompt the doctor for medications / advice / tests (text or STT).
-- Evaluation prompt compares user response vs gold + scenario + history. Persist `user_treatment_response` + `diagnosis_evaluation`. Mark `patient_user_state.status = completed`.
-- Reveal gold plan in an expander after evaluation. Retry allowed (re-enter waiting state; does not create a new conversation unless the user resets).
+- Available in Simulation and the manual Interview flow. Opening the dialog first stops active audio, microphone capture and browser requests.
+- `POST /api/conversations/{id}/finish` accepts `{ "treatment_plan": "..." }`.
+- If `patients.treatment_plan` is empty, generate and persist a reference from the scenario independently, without consulting the doctor's submitted plan.
+- Evaluation compares the user response with the reference, scenario and history. Persist `user_treatment_response`, `diagnosis_evaluation` and `ended_at`; mark `patient_user_state.status = completed`.
+- A failed evaluation leaves the conversation open for retry. A completed conversation is read-only: reject further turns and examinations while keeping its transcript and evaluation readable.
+
+### 7.3.1 Examination
+
+- Simulation and manual Interview expose **Zrób badanie** in an accessible dialog.
+- `POST /api/conversations/{id}/examinations` accepts `{ "examination": "..." }`.
+- Generate a scenario-constrained text result, persist the request and result in message history, and return the updated conversation.
+- The result is not spoken and must not reveal the hidden diagnosis or reference treatment plan. Ended conversations reject examinations.
 
 ### 7.4 Recorded interview
 
@@ -296,11 +303,11 @@ Operator runbook (click-by-click): [`technical/production-deploy.md`](./technica
 
 SoT: [`superpowers/specs/2026-09-08-refactor-build-order-design.md`](./superpowers/specs/2026-09-08-refactor-build-order-design.md).
 
-0. Scaffold: FastAPI health + voice config, Next.js PWA tabs, ApiPulse, Live/TTS lamp chrome.
+0. Scaffold: FastAPI health + voice config, Next.js PWA tabs and ApiPulse.
 1. Schema + auth + AuthGate.
 2. Simulation **text** (next patient, card, modes, turns).
 3. Chained STT + patient TTS; mute Listening during TTS.
-4. Gemini Live + lamp wiring (token, disconnect on lamp OFF).
+4. Gemini Live browser client/socket (planned; current Menu must show Live unavailable).
 5. End interview evaluation.
 6. Recorded + manual Interview tab.
 7. Sessions + Admin (approval, cap, bulk generate).

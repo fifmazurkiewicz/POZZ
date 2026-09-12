@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.llm.provider import MOCK_FIRST_TIME_PLAN, MOCK_TREATMENT_PLAN, get_text_provider
@@ -63,6 +63,7 @@ def generate_patient(
         treatment_plan=gold,
         keywords=keywords,
         is_first_time=is_first,
+        is_private=bool(keywords and keywords.strip()),
     )
     db.add(patient)
     db.commit()
@@ -85,7 +86,11 @@ def pick_or_generate_patient(db: Session, user: User, keywords: str | None = Non
     )
     unused = db.scalars(
         select(Patient)
-        .where(Patient.id.notin_(done_ids), Patient.id.notin_(open_ids))
+        .where(
+            Patient.id.notin_(done_ids),
+            Patient.id.notin_(open_ids),
+            or_(Patient.is_private.is_(False), Patient.created_by == user.id),
+        )
         .order_by(Patient.created_at.asc())
     ).first()
     if unused is not None:
@@ -112,7 +117,7 @@ def open_simulation(db: Session, user: User, patient: Patient) -> Conversation:
 
 def conversation_payload(conv: Conversation, patient: Patient) -> dict:
     card = public_card(parse_patient_card_from_scenario(patient.scenario))
-    return {
+    payload = {
         "conversation_id": str(conv.id),
         "patient_id": str(patient.id),
         "kind": conv.kind,
@@ -122,7 +127,12 @@ def conversation_payload(conv: Conversation, patient: Patient) -> dict:
         "messages": [
             {"id": m.id, "role": m.role, "content": m.content} for m in conv.messages
         ],
+        "ended_at": conv.ended_at.isoformat() if conv.ended_at else None,
+        "user_treatment_response": conv.user_treatment_response,
     }
+    if conv.ended_at is not None:
+        payload["diagnosis_evaluation"] = conv.diagnosis_evaluation
+    return payload
 
 
 def get_owned_conversation(db: Session, user: User, conversation_id: uuid.UUID) -> Conversation:
@@ -130,6 +140,20 @@ def get_owned_conversation(db: Session, user: User, conversation_id: uuid.UUID) 
         select(Conversation)
         .options(joinedload(Conversation.patient), selectinload(Conversation.messages))
         .where(Conversation.id == conversation_id)
+    ).first()
+    if conv is None or conv.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    return conv
+
+
+def get_owned_conversation_for_update(
+    db: Session, user: User, conversation_id: uuid.UUID
+) -> Conversation:
+    conv = db.scalars(
+        select(Conversation)
+        .options(joinedload(Conversation.patient), selectinload(Conversation.messages))
+        .where(Conversation.id == conversation_id)
+        .with_for_update()
     ).first()
     if conv is None or conv.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")

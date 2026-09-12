@@ -19,13 +19,13 @@ Placeholders only. Copy `.env.example` â†’ `.env` and `frontend/.env.example` â†
 | `TEXT_PROVIDER` | Text LLM adapter (`openrouter`). |
 | `TEXT_MODEL` | OpenRouter slug (default `google/gemini-2.5-flash-lite`). |
 | `OPENROUTER_API_KEY` | OpenRouter. |
-| `VOICE_MODE` | `speech_to_speech` (Live allowed) or `chained` (lamp forced off). |
-| `GOOGLE_API_KEY` | Gemini Live / Google. |
+| `VOICE_MODE` | Server capability flag (`speech_to_speech` or `chained`). It does not make Live functional without a browser client/socket; the current UI uses chained TTS. |
+| `GOOGLE_API_KEY` | Reserved for the planned Gemini Live integration / Google. |
 | `STT_PROVIDER` | `groq` (default). |
 | `GROQ_API_KEY` | Groq Whisper. |
 | `OPENAI_API_KEY` | Optional STT fallback. |
 | `TTS_PROVIDER` | `elevenlabs` (product) or `browser`. |
-| `TTS_VOICE_ID` | ElevenLabs voice id (Polish patient). |
+| `TTS_VOICE_ID` | Default ElevenLabs voice ID (Polish patient). A validated browser-local override may be sent with a speech request; empty uses this default. |
 | `ELEVENLABS_API_KEY` | ElevenLabs. |
 | `LANGFUSE_PUBLIC_KEY` | Langfuse Cloud. |
 | `LANGFUSE_SECRET_KEY` | Langfuse Cloud. |

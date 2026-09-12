@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -9,14 +10,20 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.auth.deps import get_approved_user
 from app.db import get_db
 from app.llm.provider import get_text_provider
-from app.models import Conversation, Message, User
+from app.models import Conversation, Message, PatientUserState, User
 from app.patients.service import (
     ROLE_FOR_MODE,
     assert_under_cap,
     conversation_payload,
     get_owned_conversation,
+    get_owned_conversation_for_update,
 )
-from app.prompts.simulation import create_simulation_prompt
+from app.prompts.simulation import (
+    create_evaluation_prompt,
+    create_examination_prompt,
+    create_reference_plan_prompt,
+    create_simulation_prompt,
+)
 
 router = APIRouter()
 
@@ -46,6 +53,22 @@ class TurnBody(BaseModel):
     mode: str | None = None
 
 
+class ExaminationBody(BaseModel):
+    examination: str = Field(min_length=1, max_length=4000)
+
+
+class FinishBody(BaseModel):
+    treatment_plan: str = Field(min_length=1, max_length=12_000)
+
+
+def _assert_open(conv: Conversation) -> None:
+    if conv.ended_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "conversation_completed", "message": "Wywiad został już zakończony."},
+        )
+
+
 @router.get("/{conversation_id}")
 def get_conversation(
     conversation_id: uuid.UUID,
@@ -63,8 +86,9 @@ def post_turn(
     user: Annotated[User, Depends(get_approved_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict:
-    assert_under_cap(db, user)
     conv = get_owned_conversation(db, user, conversation_id)
+    _assert_open(conv)
+    assert_under_cap(db, user)
     if body.mode:
         if body.mode not in ROLE_FOR_MODE:
             from fastapi import HTTPException, status
@@ -91,3 +115,69 @@ def post_turn(
     payload = conversation_payload(conv, conv.patient)
     payload["assistant"] = {"id": assistant.id, "role": "assistant", "content": reply}
     return payload
+
+
+@router.post("/{conversation_id}/examinations")
+def post_examination(
+    conversation_id: uuid.UUID,
+    body: ExaminationBody,
+    user: Annotated[User, Depends(get_approved_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    conv = get_owned_conversation_for_update(db, user, conversation_id)
+    _assert_open(conv)
+    assert_under_cap(db, user)
+    examination = body.examination.strip()
+    history = [{"role": message.role, "content": message.content} for message in conv.messages]
+    result = get_text_provider().complete(
+        create_examination_prompt(
+            patient_scenario=conv.patient.scenario,
+            chat_history=history,
+            examination=examination,
+        )
+    ).strip()
+    db.add(Message(conversation_id=conv.id, role="user", content=f"Badanie: {examination}"))
+    db.add(Message(conversation_id=conv.id, role="assistant", content=f"Wynik badania: {result}"))
+    db.commit()
+    return conversation_payload(get_owned_conversation(db, user, conversation_id), conv.patient)
+
+
+@router.post("/{conversation_id}/finish")
+def finish_conversation(
+    conversation_id: uuid.UUID,
+    body: FinishBody,
+    user: Annotated[User, Depends(get_approved_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    conv = get_owned_conversation_for_update(db, user, conversation_id)
+    if conv.ended_at is not None:
+        return conversation_payload(conv, conv.patient)
+    assert_under_cap(db, user)
+    provider = get_text_provider()
+    reference_plan = conv.patient.treatment_plan
+    if not reference_plan:
+        reference_plan = provider.complete(
+            create_reference_plan_prompt(patient_scenario=conv.patient.scenario)
+        ).strip()
+    treatment_plan = body.treatment_plan.strip()
+    history = [{"role": message.role, "content": message.content} for message in conv.messages]
+    evaluation = provider.complete(
+        create_evaluation_prompt(
+            reference_plan=reference_plan,
+            chat_history=history,
+            treatment_plan=treatment_plan,
+        )
+    ).strip()
+    conv.patient.treatment_plan = reference_plan
+    conv.user_treatment_response = treatment_plan
+    conv.diagnosis_evaluation = evaluation
+    conv.ended_at = datetime.now(timezone.utc)
+    if conv.kind == "simulation":
+        state = db.get(PatientUserState, (user.id, conv.patient_id))
+        if state is None:
+            db.add(PatientUserState(user_id=user.id, patient_id=conv.patient_id, status="completed"))
+        else:
+            state.status = "completed"
+            state.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return conversation_payload(get_owned_conversation(db, user, conversation_id), conv.patient)

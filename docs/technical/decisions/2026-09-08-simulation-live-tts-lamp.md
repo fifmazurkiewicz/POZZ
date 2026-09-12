@@ -1,7 +1,7 @@
 # ADR — Simulation Live vs TTS lamp
 
 **Date:** 2026-09-08  
-**Status:** accepted (supersedes 2026-09-07 “no TTS / no Live in MVP”)
+**Status:** superseded on 2026-09-11 by `2026-09-11-interview-controls-and-voice-settings.md`
 
 ## Context
 
@@ -18,3 +18,5 @@ The Streamlit prototype never spoke the patient. The 2026-09-07 contract deferre
 ## Consequences
 
 Package 0 ships lamp chrome without connecting Live or playing TTS. Packages 3–4 add the audio backends. Spend cap counts TTS + ASR + GenAI.
+
+The lamp UI was later removed in favor of voice settings in Menu. The checked-out product has chained TTS but no functional Gemini Live browser client/socket.

@@ -10,7 +10,7 @@ Copy produktu jest **po polsku** (preserve). To nie jest aplikacja medyczna — 
 - **Wywiad** — nagranie jednego ujęcia (Start → Stop → przetwarzanie) **oraz** ręczny konstruktor linii Lekarz/Pacjent → podsumowanie i zalecenia.
 - **Menu → Sesje** — lista własnych wywiadów (symulacja / nagrany / ręczny) + szczegół.
 - Google OAuth, bramka akceptacji, Admin (cap, kolejka Accept, masowe generowanie pacjentów).
-- **Głos w Symulacji:** lampa Live Gemini (ON) vs TTS (OFF); transkrypt + composer zawsze. Spec: [`../superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`](../superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md).
+- **Głos w Symulacji:** obecnie chained STT + TTS. Wybór trybu jest w Menu; Live jest pokazany jako niedostępny do czasu implementacji klienta Gemini Live. Transkrypt + composer są zawsze widoczne. Spec: [`../superpowers/specs/2026-09-11-interview-controls-design.md`](../superpowers/specs/2026-09-11-interview-controls-design.md).
 
 **Poza MVP (Etap 2):** podpowiedzi co 10 s podczas nagrania, diarization GPU, wipe bazy w UI, resume tej samej `conversation_id`.
 
@@ -41,19 +41,20 @@ Zimny API: globalny banner **Waking up…** (ApiPulse), zanim czat/mikrofon są 
 
 - Pole **Słowa kluczowe** (opcjonalne) + **Następny pacjent**.
 - **Karta pacjenta** zwijana. First-time: imię, wiek, historia w punkcie = Nie. Returning: pełna karta. Scenariusz ukryty (nie pokazujemy gold planu ani pełnego HPI lekarzowi).
-- Chrome Symulacji (zablokowane, jak Langy Chat): nagłówek (skrót pacjenta + Następny) · **wiersz statusu** (lampa Live/TTS lewo · Ready/Słuchanie środek · kropki Głos pacjenta + Słuchanie prawo) · tylko transkrypt się scrolluje · composer + dolny pasek.
+- Powłoka ma stałą wysokość viewportu. Tylko transkrypt się przewija; composer, akcje rozmowy i globalny dolny pasek pozostają widoczne, również nad mobile safe area.
 - Transkrypt **zawsze widoczny** w aktywnej sesji (linie Lekarz / Pacjent / AI).
 - Radio trybu pod czatem: Lekarz | Pacjent | Dopytaj AI.
-- Composer: text input zawsze; Listening opcjonalne. Send → Stop gdy pacjent mówi lub model pisze.
-- Lampa: ON = Gemini Live; OFF = STT + TTS pacjenta. `VOICE_MODE=chained` wyłącza lampę. Preference w `localStorage`.
+- Composer: text input zawsze; Listening opcjonalne. Obok pola są opisane ikony mikrofonu i głośnika ze stanem dostępnym także bez rozpoznawania koloru. Nie stosujemy nieopisanych kropek statusu głosu.
+- **Zatrzymaj** anuluje bieżące żądanie przeglądarki, wycisza TTS / mowę przeglądarki, zatrzymuje mikrofon i odrzuca niedokończony input. Praca synchroniczna uruchomiona już na serwerze może dobiec końca, ale jej spóźniona odpowiedź nie zmienia zatrzymanego widoku.
+- **Zrób badanie** otwiera dialog z widoczną etykietą. Wynik jest tekstem zapisanym w historii; nie jest odczytywany głosem i nie ujawnia ukrytej diagnozy ani wzorcowego planu.
 - **Resetuj wywiad** — nowa konwersacja, ten sam pacjent.
-- **Zakończ wywiad** (gdy jest ≥ 1 tura) → textarea planu (leki / zalecenia / badania) + opcjonalny mic → **Wyślij** → ocena + expander złotego planu. **Spróbuj ponownie** wraca do textarea.
+- **Zakończ wywiad** (gdy jest ≥ 1 tura) zatrzymuje audio i otwiera dialog planu (leki / zalecenia / badania) → **Zakończ i oceń**. Sukces zapisuje ocenę i czas zakończenia; rozmowa staje się tylko do odczytu. Błąd pozostawia ją otwartą do ponowienia.
 
 ## 6. Wywiad (nagrany + ręczny)
 
 - Sub-tryby: **Nagraj** | **Ręcznie**.
 - Nagraj: Start (tworzy sesję) → nagrywanie → Stop (upload + spinner transkrypcja/analiza) → transkrypt z rolami + podsumowanie + ekstrakcja (leki / zalecenia / badania).
-- Ręcznie: textarea scenariusza opcjonalna; radio Lekarz/Pacjent; Dodaj linię; Koniec wywiadu → podsumowanie + zalecenia.
+- Ręcznie: textarea scenariusza opcjonalna; rozmowa tekstowa; te same akcje **Zatrzymaj**, **Zrób badanie** i **Zakończ wywiad** co w Symulacji. Wyniki badań trafiają do historii, a ukończona rozmowa jest tylko do odczytu.
 
 ## 7. Sesje
 
@@ -61,9 +62,11 @@ Lista własnych pozycji (data, etykieta). Tap → szczegół (transkrypt / czat 
 
 ## 8. Menu
 
-Sesje · Wygląd (System / Jasny / Ciemny) · (Admin) · Wyloguj.
+Sesje · Wygląd (System / Jasny / Ciemny) · Głos · (Admin) · Wyloguj.
 
-**Admin:** lista użytkowników (`is_approved` toggle), spend cap, masowe generowanie N pacjentów, status puli. Bez wipe.
+**Głos:** wybór Live / TTS znajduje się tutaj, nie w wierszu rozmowy. Obecna wersja pokazuje Live jako niedostępny i wybiera TTS. Opcjonalne pole ElevenLabs Voice ID jest zapisane lokalnie w tej przeglądarce; puste pole oznacza domyślny głos serwera, a format jest walidowany.
+
+**Admin:** lista użytkowników (`is_approved` toggle), spend cap, masowe generowanie N pacjentów, status puli. Bez wipe i bez osobnego przycisku Menu w prawym górnym rogu; powrót zapewnia stały dolny pasek.
 
 ## 9. Stany puste / błędy / cap
 

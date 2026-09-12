@@ -36,13 +36,21 @@ Short dated decisions. Living detail often lives in `docs/architecture-for-curso
 - Originally: no patient TTS / no Live in MVP
 - **Superseded** by 2026-09-08 Live/TTS lamp
 
-## 2026-09-08 — Simulation Live vs TTS lamp
+## 2026-09-08 — Simulation Live vs TTS lamp (superseded 2026-09-11)
 
 - Lamp ON = Gemini Live; OFF = chained STT + patient TTS
 - `localStorage` `pozz-sim-live-gemini`; env `VOICE_MODE` still caps Live
 - Mute Listening while the patient speaks
 - Spec: `docs/superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`
 - Build order: `docs/superpowers/specs/2026-09-08-refactor-build-order-design.md`
+
+## 2026-09-11 — Interview controls and voice settings
+
+- Simulation and manual Interview share Stop, Examination and End interview controls
+- Completed conversations persist evaluation + `ended_at` and become read-only
+- Voice-mode and local ElevenLabs voice ID settings live in Menu
+- Current client supports chained TTS; Live is displayed as unavailable
+- ADR: `docs/technical/decisions/2026-09-11-interview-controls-and-voice-settings.md`
 
 ## 2026-09-11 — production deploy runbook
 

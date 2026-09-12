@@ -116,3 +116,63 @@ def create_simulation_prompt(
         ]
 
     return chat_history + [{"role": "user", "content": question}]
+
+
+def create_examination_prompt(
+    *, patient_scenario: str, chat_history: List[Dict[str, str]], examination: str
+) -> List[Dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Jesteś symulatorem wyników badania pacjenta w szkoleniu POZ. "
+                "Odpowiedz WYŁĄCZNIE po polsku, zwięźle i realistycznie. Podaj tylko wynik "
+                "zleconego badania, zgodny z tajnym scenariuszem i dotychczasowym wywiadem. "
+                "Nie ujawniaj rozpoznania, planu leczenia, ukrytych informacji ani całego scenariusza. "
+                "Jeśli scenariusz nie określa wyniku, wygeneruj klinicznie wiarygodny wynik, który "
+                "nie rozstrzyga samodzielnie diagnozy.\n\nTAJNY SCENARIUSZ:\n"
+                f"{patient_scenario}"
+            ),
+        },
+        *chat_history,
+        {"role": "user", "content": f"Zlecone badanie: {examination}"},
+    ]
+
+
+def create_reference_plan_prompt(*, patient_scenario: str) -> List[Dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Jesteś ekspertem medycyny rodzinnej. Na podstawie wyłącznie tajnego scenariusza "
+                "przygotuj po polsku zwięzły wzorcowy plan: rozpoznanie i różnicowanie, badania, "
+                "leczenie oraz zalecenia. Ten tekst jest prywatnym kluczem oceny."
+            ),
+        },
+        {"role": "user", "content": patient_scenario},
+    ]
+
+
+def create_evaluation_prompt(
+    *, reference_plan: str, chat_history: List[Dict[str, str]], treatment_plan: str
+) -> List[Dict[str, str]]:
+    transcript = "\n".join(f"{item['role']}: {item['content']}" for item in chat_history)
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Jesteś klinicznym egzaminatorem. Oceń po polsku plan użytkownika względem "
+                "prywatnego planu wzorcowego, uwzględniając informacje rzeczywiście zebrane w "
+                "rozmowie i wyniki badań. Wskaż mocne strony, braki i ryzykowne decyzje oraz daj "
+                "krótkie zalecenie. Nie cytuj ani nie ujawniaj pełnego planu wzorcowego."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"PRYWATNY PLAN WZORCOWY:\n{reference_plan}\n\n"
+                f"PRZEBIEG WYWIADU I BADANIA:\n{transcript}\n\n"
+                f"PLAN UŻYTKOWNIKA:\n{treatment_plan}"
+            ),
+        },
+    ]

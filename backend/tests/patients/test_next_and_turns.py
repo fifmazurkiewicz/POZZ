@@ -93,3 +93,13 @@ def test_unapproved_cannot_start_patient(sqlite_client: TestClient):
         assert response.json()["detail"]["code"] == "account_pending_approval"
     finally:
         del sqlite_client.app.dependency_overrides[get_current_user]
+
+
+def test_keyword_generated_patient_is_private(sqlite_client: TestClient, db_session: Session):
+    response = sqlite_client.post(
+        "/api/patients/next", headers=AUTH, json={"keywords": "fictional cough case"}
+    )
+    assert response.status_code == 200, response.text
+    patient = db_session.get(Patient, uuid.UUID(response.json()["patient_id"]))
+    assert patient is not None
+    assert patient.is_private is True

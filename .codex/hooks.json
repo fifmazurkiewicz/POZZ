@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|Search|Shell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:\\Users\\MSI\\PycharmProjects\\POZZ\\.cursor\\hooks\\graft-hooks.cjs\" cursor-post-tool"
+          }
+        ]
+      }
+    ]
+  }
+}
