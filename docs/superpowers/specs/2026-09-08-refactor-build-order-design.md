@@ -20,7 +20,7 @@ Do **not** start Gemini Live before a text turn works. Do **not** rewrite Stream
 | **3** | Chained voice | Mic → STT; patient TTS (`TTS_PROVIDER`); mute Listening during TTS |
 | **4** | Gemini Live | Ephemeral token; lamp ON connects; lamp OFF never opens Live |
 | **5** | End interview | Gold plan hidden until evaluation; retry |
-| **6** | Interview tab | Recorded one-shot + manual constructor |
+| **6** | Interview tab | Recorded one-shot + manual constructor (+ dictation via mic, STT-only, since 2026-09-13) |
 | **7** | Sessions + Admin | Per-user history; approval; spend cap; bulk generate |
 | **8** | promptfoo | Critical prompts in CI |
 
