@@ -16,6 +16,7 @@ export type SimulationSession = {
   ended_at?: string | null;
   user_treatment_response?: string | null;
   diagnosis_evaluation?: string | null;
+  interview_summary?: string | null;
 };
 
 export async function fetchNextPatient(token: string, keywords?: string, signal?: AbortSignal): Promise<SimulationSession> {
@@ -49,6 +50,12 @@ export async function postTurn(
 export function requestExamination(token: string, id: string, examination: string, signal?: AbortSignal) {
   return apiFetch<SimulationSession>(`/api/conversations/${id}/examinations`, {
     method: "POST", token, signal, body: { examination },
+  });
+}
+
+export function generateCasePlan(token: string, id: string, signal?: AbortSignal) {
+  return apiFetch<SimulationSession>(`/api/conversations/${id}/plan`, {
+    method: "POST", token, signal, body: {},
   });
 }
 

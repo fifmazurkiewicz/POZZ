@@ -129,6 +129,7 @@ def conversation_payload(conv: Conversation, patient: Patient) -> dict:
         ],
         "ended_at": conv.ended_at.isoformat() if conv.ended_at else None,
         "user_treatment_response": conv.user_treatment_response,
+        "interview_summary": conv.interview_summary,
     }
     if conv.ended_at is not None:
         payload["diagnosis_evaluation"] = conv.diagnosis_evaluation

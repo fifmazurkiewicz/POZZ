@@ -153,6 +153,38 @@ def create_reference_plan_prompt(*, patient_scenario: str) -> List[Dict[str, str
     ]
 
 
+def create_case_description_prompt(
+    *, patient_scenario: str, chat_history: List[Dict[str, str]]
+) -> List[Dict[str, str]]:
+    """Structured SOR-style case description drafted from the doctor's own interview."""
+    transcript = "\n".join(f"{item['role']}: {item['content']}" for item in chat_history)
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Jesteś lekarzem dokumentującym przypadek w izbie przyjęć / SOR. "
+                "Na podstawie WYŁĄCZNIE poniższego przebiegu wywiadu i opisu sytuacji przygotuj "
+                "po polsku zwięzły, uporządkowany opis przypadku w następującej strukturze:\n"
+                "## WYWIAD\n- Skargi / powód zgłoszenia, historia obecnej choroby (HPI)\n"
+                "- Choroby przewlekłe, leki, alergie, wywiad rodzinny (jeśli wiadomo)\n"
+                "## ROZPOZNANIE RÓŻNICOWE\n- Główne podejrzenia / rozpoznanie różnicowe\n"
+                "## ZALECANE BADANIA\n- Lista badań adekwatnych do objawów\n"
+                "## PLAN POSTĘPOWANIA\n- Następne kroki, leczenie, zalecenia\n\n"
+                "Nie wymyślaj faktów spoza transkryptu i opisu sytuacji. "
+                "Nie ujawniaj ukrytych informacji ani wzorcowego rozpoznania, "
+                "jeśli nie wynikają wprost z przebiegu wywiadu."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"OPIS SYTUACJI:\n{patient_scenario}\n\n"
+                f"PRZEBIEG WYWIADU:\n{transcript}"
+            ),
+        },
+    ]
+
+
 def create_evaluation_prompt(
     *, reference_plan: str, chat_history: List[Dict[str, str]], treatment_plan: str
 ) -> List[Dict[str, str]]:
