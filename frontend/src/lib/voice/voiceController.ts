@@ -72,7 +72,8 @@ export class VoiceController {
           if (settled) return;
           settled = true;
           this.playbackDone = null;
-          error ? reject(error) : resolve();
+          if (error) reject(error);
+          else resolve();
         };
         this.playbackDone = () => finish();
         audio.onended = () => finish();

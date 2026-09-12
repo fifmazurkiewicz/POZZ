@@ -27,6 +27,9 @@ htmlcov/
 .coverage
 .coverage.*
 
+# pnpm store (accidentally committed; local cache only)
+.pnpm-store/
+
 # Streamlit local
 .streamlit/
 

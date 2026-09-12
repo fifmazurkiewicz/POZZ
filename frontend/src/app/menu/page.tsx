@@ -1,10 +1,24 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { readVoiceId, saveVoiceId } from "@/lib/voice/voicePreference";
 
 export default function MenuPage() {
   const { email, signOut, isAdmin } = useAuth();
+  const [voiceId, setVoiceId] = useState(() => readVoiceId());
+  const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
+
+  function persistVoiceId(value: string | null) {
+    try {
+      saveVoiceId(value ?? "");
+      setVoiceId(value ?? "");
+      setVoiceMessage(value && value.trim() ? "Zapisano głos dla tej przeglądarki." : "Używasz domyślnego głosu serwera.");
+    } catch {
+      setVoiceMessage("Nieprawidłowy identyfikator. Dozwolone litery, cyfry, podkreślniki i myślniki (do 128 znaków).");
+    }
+  }
 
   return (
     <main className="app-page flex-1">
@@ -24,6 +38,25 @@ export default function MenuPage() {
           </Link>
         ) : null}
       </div>
+      <section className="classical-card mt-6 max-w-xl space-y-3 p-4">
+        <h2 className="text-xl">Głos</h2>
+        <p className="text-sm text-[var(--color-soft)]">Preferencja jest zapisana w tej przeglądarce. Puste pole oznacza domyślny głos serwera.</p>
+        <label htmlFor="voice-id" className="block text-sm text-[var(--color-soft)]">Identyfikator głosu ElevenLabs (opcjonalny)</label>
+        <input
+          id="voice-id"
+          className="min-h-11 w-full rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-3"
+          value={voiceId}
+          onChange={(event) => {
+            setVoiceId(event.target.value);
+            if (voiceMessage) setVoiceMessage(null);
+          }}
+        />
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="classical-btn" onClick={() => persistVoiceId(voiceId)}>Zapisz głos</button>
+          <button type="button" className="classical-btn" onClick={() => persistVoiceId("")}>Przywróć domyślny</button>
+        </div>
+        {voiceMessage ? <p className="text-sm" role="status">{voiceMessage}</p> : null}
+      </section>
       <button type="button" className="classical-btn mt-8" onClick={() => void signOut()}>
         Wyloguj
       </button>

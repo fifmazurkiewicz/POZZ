@@ -30,10 +30,10 @@
 - Consumes: `get_approved_user`, `User`
 - Produces: `get_admin_user`, `GET /api/admin/users`, `PATCH /api/admin/users/{user_id}`
 
-- [ ] **Step 1: Write the failing tests** in `backend/tests/admin/test_users.py`
-- [ ] **Step 2: Run** `cd backend && python -m pytest tests/admin/test_users.py -v` — expect FAIL (404 / missing routes)
-- [ ] **Step 3: Implement** `get_admin_user`, list + patch
-- [ ] **Step 4: Re-run pytest** — expect PASS
+- [x] **Step 1: Write the failing tests** in `backend/tests/admin/test_users.py`
+- [x] **Step 2: Run** `cd backend && python -m pytest tests/admin/test_users.py -v` — expect FAIL (404 / missing routes)
+- [x] **Step 3: Implement** `get_admin_user`, list + patch
+- [x] **Step 4: Re-run pytest** — expect PASS
 
 ### Task 2: Admin screen
 
@@ -47,12 +47,12 @@
 - Consumes: `GET/PATCH /api/admin/users`, `useAuth().isAdmin`
 - Produces: Menu → Admin; `/menu/admin` queue
 
-- [ ] **Step 1: Failing Vitest** for `canOpenAdmin` and pending-first sort
-- [ ] **Step 2: Implement** access helpers, API client, page, Menu link
-- [ ] **Step 3:** `cd frontend && npm test && npm run lint`
+- [x] **Step 1: Failing Vitest** for `canOpenAdmin` and pending-first sort
+- [x] **Step 2: Implement** access helpers, API client, page, Menu link
+- [x] **Step 3:** `cd frontend && npm test && npm run lint`
 
 ### Task 3: Docs + verify
 
-- [ ] Sync architecture §7.7, UX spec §8, ADR, working plan
-- [ ] `cd backend && python -m pytest` and `cd frontend && npm test && npm run lint && npm run build`
-- [ ] Browser: Menu → Admin as admin; non-admin hidden
+- [x] Sync architecture §7.7, UX spec §8, ADR, working plan
+- [x] `cd backend && python -m pytest` and `cd frontend && npm test && npm run lint && npm run build`
+- [ ] Browser: Menu → Admin as admin; non-admin hidden (pending manual browser check)

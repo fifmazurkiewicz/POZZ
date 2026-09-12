@@ -221,6 +221,17 @@ patient_user_state (
 
 RLS: `auth.uid() = user_id` on user-owned tables. `patients` readable by approved users; insert/update/delete admin or service role. `jobs` admin/service. Render backend uses SQLAlchemy with the DB URL (bypasses RLS).
 
+## 6. Privacy and data-subject controls
+
+Two authenticated endpoints, both behind `get_approved_user`, cover RODO-style self-service without deleting the auth account:
+
+| Route | Purpose |
+|---|---|
+| `GET /api/privacy/export` | Portable JSON: account fields, conversations (with messages and `kind`/`mode`/evaluation fields), private cases the user authored, usage ledger |
+| `DELETE /api/privacy/content` | Erases app content (`messages`, `transcripts`, `suggestions`, `conversations`, `patient_user_state`, `jobs`, `usage_ledger`, private `patients`). Requires typed confirmation `USUŃ MOJE DANE`. Account/auth record retained |
+
+Frontend surfaces: `/privacy` (published informational page describing what is stored and the AI nature of the product) and `/menu/privacy` (controls with the typed-confirmation erase). No durable audio blob is stored in the MVP (`audio_ref` null; temp files only), so exports contain no audio. The privacy page states that exact provider regions, retention periods and transfer mechanisms must be approved before production.
+
 ## 7. Key application logic
 
 ### 7.1 Next patient / generate

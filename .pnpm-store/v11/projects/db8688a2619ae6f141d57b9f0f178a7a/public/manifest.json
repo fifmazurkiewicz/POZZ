@@ -1,9 +1,0 @@
-{
-  "name": "POZZ",
-  "short_name": "POZZ",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#16130f",
-  "theme_color": "#16130f",
-  "lang": "pl"
-}

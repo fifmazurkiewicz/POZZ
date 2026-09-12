@@ -41,7 +41,13 @@ describe("VoiceController", () => {
 
   it("falls back only for explicit tts_unavailable", async () => {
     let finish!: () => void;
-    vi.stubGlobal("SpeechSynthesisUtterance", class { lang = ""; onend: (() => void) | null = null; onerror = null; constructor(_text: string) { finish = () => this.onend?.(); } });
+    vi.stubGlobal("SpeechSynthesisUtterance", class {
+      lang = "";
+      text = "";
+      onend: (() => void) | null = null;
+      onerror = null;
+      constructor(text: string) { this.text = text; finish = () => this.onend?.(); }
+    });
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: false, status: 503, statusText: "Unavailable",
       json: async () => ({ detail: { code: "tts_unavailable", message: "missing" } }),
@@ -85,9 +91,10 @@ describe("VoiceController", () => {
     class Recorder {
       state: RecordingState = "inactive";
       mimeType = "audio/webm";
+      stream: MediaStream;
       ondataavailable: ((event: BlobEvent) => void) | null = null;
       onstop: (() => void) | null = null;
-      constructor(_stream: MediaStream) {}
+      constructor(stream: MediaStream) { this.stream = stream; }
       start() { this.state = "recording"; }
       stop() {
         this.ondataavailable?.({ data: new Blob(["hello"]) } as BlobEvent);

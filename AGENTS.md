@@ -76,5 +76,6 @@ Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empt
 - Patient catalog is shared; conversations and evaluations are per-user. “Next patient” means an unused-by-this-user catalog row, or generate on demand from keywords.
 - First-time patients (~20%): card shows name + age only; chronic / ops / allergies / family history must be gathered in the interview.
 - Hidden scenario gold (full HPI, traps, treatment plan) is never shown until after End interview evaluation.
+- Privacy: `GET /api/privacy/export` + `DELETE /api/privacy/content` (typed confirmation `USUŃ MOJE DANE`); UI at `/menu/privacy`, informational page `/privacy`. Content erase keeps the auth account.
 - `diarization_test/` is experimental Gradio work — out of MVP deploy.
 - Graft `/graft/` remains gitignored. Native `graft build` may fail without tree-sitter build tools; MCP + rule wiring is enough until then.
