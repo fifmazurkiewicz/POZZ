@@ -7,6 +7,8 @@ export type AdminUser = {
   is_admin: boolean;
   is_approved: boolean;
   spend_cap_usd?: number;
+  monthly_spend_usd?: number;
+  at_cap?: boolean;
   created_at: string | null;
 };
 

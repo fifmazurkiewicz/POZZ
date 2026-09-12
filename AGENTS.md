@@ -63,11 +63,13 @@ Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empt
 - Menu hub: Profile, Sessions, Appearance (System/Light/Dark), optional Admin, Sign out.
 - Bottom nav is Simulation / Interview / Menu.
 - Admin: bulk-generate patient catalog, spend caps, approval queue. Database wipe is admin-only with typed confirmation.
+- All API errors surface as Polish JSON `{ "code": "...", "message": "..." }` (e.g. `spend_cap_exceeded`, `provider_error`, `account_pending_approval`); toasts show the Polish message, never raw English.
 
 ## Learned Workspace Facts
 
 - POZZ is **greenfield** for production (FastAPI + Next.js PWA). The Streamlit app is the working prototype and **reference only**. ADR: `docs/technical/decisions/2026-09-07-greenfield-no-streamlit-deploy.md`.
 - Target production: Supabase + Render + Vercel + Cloudflare; Render Root Directory `backend`, Runtime Docker (never `Docker` as root); Cloudflare `api-pozz` CNAME to Render DNS-only, `pozz` CNAME to Vercel — separate records; Google OAuth callback `/auth/callback` with server-side PKCE exchange (not client-side on `/`).
+- `CORS_ORIGINS` is a required Render env var (production host `https://pozz.fmazurkiewicz.dev`); default local is `http://localhost:3000,http://127.0.0.1:3000`. Operator runbook: `docs/technical/production-deploy.md`.
 - Supabase RLS will enforce per-user access on conversations, messages, transcripts; shared `patients` catalog is readable by approved users; `jobs` admin-only. Render backend bypasses RLS via direct SQLAlchemy (defense in depth for direct Supabase client).
 - Langfuse Cloud is the runtime prompt SoT (tracing, cost, prompt management); promptfoo suites gate CI (`npm run promptfoo`, no API keys) once backend exists.
 - Default new-user `spend_cap_usd` is 10 per calendar month (Europe/Warsaw).

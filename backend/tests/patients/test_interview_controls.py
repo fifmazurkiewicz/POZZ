@@ -76,25 +76,65 @@ def test_finish_persists_evaluation_marks_completed_and_is_idempotent(
 
 
 def test_failed_evaluation_leaves_conversation_open(
-    sqlite_client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    sqlite_client_no_raise: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
 ):
-    conversation_id = _conversation(sqlite_client)
+    conversation_id = _conversation(sqlite_client_no_raise)
 
     class Provider:
         def complete(self, messages):
             raise RuntimeError("provider failed")
 
     monkeypatch.setattr("app.api.routes.conversations.get_text_provider", lambda: Provider())
-    with pytest.raises(RuntimeError, match="provider failed"):
-        sqlite_client.post(
-            f"/api/conversations/{conversation_id}/finish", headers=AUTH,
-            json={"treatment_plan": "Plan"},
-        )
+    response = sqlite_client_no_raise.post(
+        f"/api/conversations/{conversation_id}/finish", headers=AUTH,
+        json={"treatment_plan": "Plan"},
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "provider_error"
     db_session.expire_all()
     conv = db_session.get(Conversation, uuid.UUID(conversation_id))
     assert conv.ended_at is None
     assert conv.user_treatment_response is None
     assert conv.diagnosis_evaluation is None
+
+
+def test_examination_returns_502_when_provider_errors(
+    sqlite_client_no_raise: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """Provider 4xx/5xx must surface as 502 provider_error, not a bare 500."""
+    import httpx
+
+    conversation_id = _conversation(sqlite_client_no_raise)
+
+    class Provider:
+        def complete(self, messages):
+            request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+            response = httpx.Response(502, request=request, text="bad gateway")
+            raise httpx.HTTPStatusError("502", request=request, response=response)
+
+    monkeypatch.setattr("app.api.routes.conversations.get_text_provider", lambda: Provider())
+    response = sqlite_client_no_raise.post(
+        f"/api/conversations/{conversation_id}/examinations", headers=AUTH,
+        json={"examination": "pomiar ciśnienia"},
+    )
+    assert response.status_code == 502
+    assert response.json()["detail"]["code"] == "provider_error"
+
+
+def test_existing_polish_codes_still_flow_through_handler(
+    sqlite_client: TestClient, db_session: Session
+):
+    """HTTPException with a structured Polish detail must keep its code/message untouched."""
+    conversation_id = _conversation(sqlite_client)
+    conv = db_session.get(Conversation, uuid.UUID(conversation_id))
+    db_session.add(UsageLedger(user_id=conv.user_id, action_type="test", cost_usd=10))
+    db_session.commit()
+    response = sqlite_client.post(
+        f"/api/conversations/{conversation_id}/finish", headers=AUTH,
+        json={"treatment_plan": "Plan"},
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "spend_cap_exceeded"
 
 
 def test_completed_conversation_rejects_turns_and_examinations(sqlite_client: TestClient):

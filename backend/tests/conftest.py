@@ -58,3 +58,29 @@ def sqlite_client(db_engine) -> TestClient:
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def sqlite_client_no_raise(db_engine) -> TestClient:
+    """Like ``sqlite_client`` but lets handler-added exceptions reach the test.
+
+    Use only for tests that assert on the response body of an unhandled
+    exception — the global ``app.exception_handler(Exception)`` still runs, but
+    the underlying ``raise`` does not abort the test.
+    """
+    from app.db import get_db
+    from app.main import app
+
+    SessionLocal = sessionmaker(bind=db_engine, autocommit=False, autoflush=False)
+
+    def _get_db():
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _get_db
+    with TestClient(app, raise_server_exceptions=False) as client:
+        yield client
+    app.dependency_overrides.clear()

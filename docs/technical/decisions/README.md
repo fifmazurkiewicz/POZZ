@@ -44,6 +44,30 @@ Short dated decisions. Living detail often lives in `docs/architecture-for-curso
 - Spec: `docs/superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`
 - Build order: `docs/superpowers/specs/2026-09-08-refactor-build-order-design.md`
 
+## 2026-09-11 — Interview modal error/loading states and STT dictation
+
+- `useAbortableAction` distinguishes user cancel (`signal.aborted` short-circuits the
+  catch) from transport abort / network failure; new `cancelled`, `reset`, `getError()`
+  exports
+- `InterviewActions` modal: separate "Anuluj" label, inline "Trwa…" status, microphone
+  button that calls `/api/voice/transcribe` and appends the result to the active
+  textarea (examination ≤ 2000 chars, plan ≤ 8000 chars)
+- Suppresses the modal error display whenever `cancelled === true` so Cancel never shows
+  "Spróbuj ponownie"
+- Added `vitest.config.ts` (jsdom env + `@` alias) and dev deps
+  `@testing-library/react`, `jsdom`
+
+## 2026-09-11 — Unhandled exception shapes for interview endpoints
+
+- Backend `app.exception_handler(Exception)` returns 502 for upstream provider errors
+  (httpx) and 503 for everything else, with `{"detail":{"code":"provider_error",
+  "message":"Nie udało się wykonać operacji. Spróbuj ponownie."}}`
+- Leaves `HTTPException` and validation errors untouched so existing spend-cap /
+  conversation-completed codes still flow through
+- Test `test_failed_evaluation_leaves_conversation_open` updated to assert 502 body
+  instead of raised `RuntimeError`
+- ADR: `docs/technical/decisions/2026-09-11-unhandled-exception-shapes.md`
+
 ## 2026-09-11 — Interview controls and voice settings
 
 - Simulation and manual Interview share Stop, Examination and End interview controls

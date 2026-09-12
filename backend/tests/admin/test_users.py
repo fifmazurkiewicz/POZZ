@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.auth.deps import get_current_user
-from app.models import User
+from app.models import UsageLedger, User
 
 ADMIN_EMAIL = "fifmazurkiewicz@gmail.com"
 
@@ -50,6 +50,38 @@ def test_admin_lists_users_pending_first(sqlite_client: TestClient, db_session: 
     assert "id" in first_pending
     assert "display_name" in first_pending
     assert "created_at" in first_pending
+
+
+def test_admin_lists_monthly_spend_per_user(sqlite_client: TestClient, db_session: Session):
+    admin = _user(email=ADMIN_EMAIL, is_admin=True, is_approved=True)
+    spending = _user(email="spending@example.com", is_approved=True, spend_cap_usd=20)
+    other = _user(email="other@example.com", is_approved=True, spend_cap_usd=5)
+    db_session.add_all([admin, spending, other])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UsageLedger(user_id=spending.id, action_type="test", cost_usd=3.25),
+            UsageLedger(user_id=spending.id, action_type="test", cost_usd=1.75),
+            UsageLedger(
+                user_id=other.id, action_type="test", cost_usd=7
+            ),  # over cap of 5 -> at_cap
+        ]
+    )
+    db_session.commit()
+    _override(sqlite_client, admin)
+
+    response = sqlite_client.get("/api/admin/users")
+    assert response.status_code == 200, response.text
+    users = {row["email"]: row for row in response.json()["users"]}
+    spend_row = users["spending@example.com"]
+    assert spend_row["monthly_spend_usd"] == 3.25 + 1.75
+    assert spend_row["at_cap"] is False
+    cap_row = users["other@example.com"]
+    assert cap_row["monthly_spend_usd"] == 7
+    assert cap_row["at_cap"] is True
+    admin_row = users[ADMIN_EMAIL]
+    assert admin_row["monthly_spend_usd"] == 0
+    assert admin_row["at_cap"] is False
 
 
 def test_non_admin_cannot_list_users(sqlite_client: TestClient, db_session: Session):

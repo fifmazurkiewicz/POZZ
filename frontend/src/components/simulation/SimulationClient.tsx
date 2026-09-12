@@ -26,7 +26,7 @@ export function SimulationClient() {
   const [cardOpen, setCardOpen] = useState(true);
   const [patientVoice, setPatientVoice] = useState(true);
   const patientVoiceRef = useRef(true);
-  const { busy, error, run, cancel } = useAbortableAction();
+  const { busy, error, cancelled, run, cancel } = useAbortableAction();
   const voice = useVoiceController();
   const stopVoice = voice.stop;
   const bearer = useCallback(async () => token ?? await getAccessToken(), [token, getAccessToken]);
@@ -94,7 +94,7 @@ export function SimulationClient() {
       </>}
     </section>
     {error || voice.error ? <p className="shrink-0 px-3 py-2 text-sm" role="alert">{error || voice.error}</p> : null}
-    {session ? <InterviewActions key={session.conversation_id} session={session} active={active} busy={busy} error={error} getToken={bearer} onStop={stop} onUpdate={setSession} run={run} /> : busy ? <button className="classical-btn m-3" type="button" onClick={stop}>Zatrzymaj</button> : null}
+    {session ? <InterviewActions key={session.conversation_id} session={session} active={active} busy={busy} error={error} cancelled={cancelled} getToken={bearer} onStop={stop} onUpdate={setSession} run={run} /> : busy ? <button className="classical-btn m-3" type="button" onClick={stop}>Zatrzymaj</button> : null}
     <ConversationComposer draft={draft} onDraftChange={setDraft} onSend={(event) => { event.preventDefault(); submitTurn(draft.trim()); }} disabled={busy || !session || !!session.ended_at} placeholder={session?.ended_at ? "Wywiad zakończony" : composerPlaceholder(mode)} patientVoice={patientVoice} speaking={voice.speaking} listening={voice.listening} onVoiceChange={(enabled) => { patientVoiceRef.current = enabled; setPatientVoice(enabled); if (!enabled) stopVoice(); }} onListeningChange={(enabled) => { if (enabled) void voice.startRecording((blob) => submitTurn("", blob)); else voice.finishRecording(); }} />
   </main>;
 }

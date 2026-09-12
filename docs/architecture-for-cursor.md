@@ -295,7 +295,7 @@ Frontend surfaces: `/privacy` (published informational page describing what is s
 ### 7.8 Admin
 
 - Bulk generate N patients (1–100) into the catalog (GenAI → cap of the **admin** user).
-- Approval queue + spend cap editor.
+- Approval queue + spend cap editor. Admin list shows each user's current month spend: `monthly_spend_usd` (sum of `usage_ledger.cost_usd` for the current calendar month, single `GROUP BY` query) and `at_cap` (`cap > 0 and spent >= cap`), matching `GET /api/auth/me`. Spend is read-only; only the cap is editable.
 - **No** product-UI “wipe database”. Prototype wipe stays legacy-only.
 
 ## 8. Deployment
