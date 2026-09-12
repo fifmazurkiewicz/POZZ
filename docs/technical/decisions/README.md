@@ -2,6 +2,13 @@
 
 Short dated decisions. Living detail often lives in `docs/architecture-for-cursor.md`; extract here when a decision needs a stable ID.
 
+## 2026-09-13 — privacy and security foundation
+
+- Synthetic-data-only default; user-authored and keyword-seeded cases are private
+- Self-service export and application-content deletion, with auth account retained
+- Direct profile updates restricted to `display_name`; production compliance gates remain explicit
+- ADR: `docs/technical/decisions/2026-09-13-privacy-security-foundation.md`
+
 ## 2026-09-07 — constitution hygiene in-repo
 
 - Taste + language rules copied into `.cursor/rules/`; POZZ dials VARIANCE 3 / MOTION 2 / DENSITY 6

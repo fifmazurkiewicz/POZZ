@@ -227,7 +227,7 @@ Two authenticated endpoints, both behind `get_approved_user`, cover RODO-style s
 
 | Route | Purpose |
 |---|---|
-| `GET /api/privacy/export` | Portable JSON: account fields, conversations (with messages and `kind`/`mode`/evaluation fields), private cases the user authored, usage ledger |
+| `GET /api/privacy/export` | Portable JSON: account fields, conversations, messages, private cases, transcripts, suggestions, usage ledger, patient state and jobs |
 | `DELETE /api/privacy/content` | Erases app content (`messages`, `transcripts`, `suggestions`, `conversations`, `patient_user_state`, `jobs`, `usage_ledger`, private `patients`). Requires typed confirmation `USUŃ MOJE DANE`. Account/auth record retained |
 
 Frontend surfaces: `/privacy` (published informational page describing what is stored and the AI nature of the product) and `/menu/privacy` (controls with the typed-confirmation erase). No durable audio blob is stored in the MVP (`audio_ref` null; temp files only), so exports contain no audio. The privacy page states that exact provider regions, retention periods and transfer mechanisms must be approved before production.

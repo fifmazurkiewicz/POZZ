@@ -30,6 +30,27 @@ def build_user_export(db: Session, user: User) -> dict:
         .where(UsageLedger.user_id == user.id)
         .order_by(UsageLedger.created_at.asc())
     ).all()
+    conversation_ids = [conversation.id for conversation in conversations]
+    transcripts = _group_by_conversation(
+        db.scalars(
+            select(InterviewTranscript)
+            .where(InterviewTranscript.conversation_id.in_(conversation_ids))
+            .order_by(InterviewTranscript.conversation_id, InterviewTranscript.chunk_number)
+        ).all()
+        if conversation_ids else []
+    )
+    suggestions = _group_by_conversation(
+        db.scalars(
+            select(InterviewSuggestion)
+            .where(InterviewSuggestion.conversation_id.in_(conversation_ids))
+            .order_by(InterviewSuggestion.conversation_id, InterviewSuggestion.chunk_number)
+        ).all()
+        if conversation_ids else []
+    )
+    patient_states = db.scalars(
+        select(PatientUserState).where(PatientUserState.user_id == user.id)
+    ).all()
+    jobs = db.scalars(select(Job).where(Job.user_id == user.id).order_by(Job.created_at.asc())).all()
     return {
         "format_version": 1,
         "exported_at": datetime.now(timezone.utc).isoformat(),
@@ -66,6 +87,14 @@ def build_user_export(db: Session, user: User) -> dict:
                     }
                     for message in conv.messages
                 ],
+                "transcripts": [
+                    {"chunk_number": item.chunk_number, "transcript": item.transcript_json, "created_at": _iso(item.created_at)}
+                    for item in transcripts.get(conv.id, [])
+                ],
+                "suggestions": [
+                    {"chunk_number": item.chunk_number, "minute_number": item.minute_number, "content": item.suggestions, "created_at": _iso(item.created_at)}
+                    for item in suggestions.get(conv.id, [])
+                ],
             }
             for conv in conversations
         ],
@@ -74,9 +103,18 @@ def build_user_export(db: Session, user: User) -> dict:
                 "action_type": item.action_type,
                 "cost_usd": float(item.cost_usd),
                 "provider": item.provider,
+                "langfuse_trace_id": item.langfuse_trace_id,
                 "created_at": _iso(item.created_at),
             }
             for item in ledgers
+        ],
+        "patient_state": [
+            {"patient_id": str(item.patient_id), "status": item.status, "updated_at": _iso(item.updated_at)}
+            for item in patient_states
+        ],
+        "jobs": [
+            {"id": str(item.id), "kind": item.kind, "payload": item.payload, "status": item.status, "error": item.error, "created_at": _iso(item.created_at), "updated_at": _iso(item.updated_at)}
+            for item in jobs
         ],
     }
 
@@ -123,3 +161,10 @@ def _execute_delete(db: Session, statement) -> int:
 
 def _iso(value) -> str | None:
     return value.isoformat() if value else None
+
+
+def _group_by_conversation(items: list) -> dict:
+    grouped: dict = {}
+    for item in items:
+        grouped.setdefault(item.conversation_id, []).append(item)
+    return grouped
