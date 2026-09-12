@@ -19,6 +19,7 @@ from app.patients.service import (
     get_owned_conversation_for_update,
 )
 from app.prompts.simulation import (
+    create_case_description_prompt,
     create_evaluation_prompt,
     create_examination_prompt,
     create_reference_plan_prompt,
@@ -138,6 +139,28 @@ def post_examination(
     ).strip()
     db.add(Message(conversation_id=conv.id, role="user", content=f"Badanie: {examination}"))
     db.add(Message(conversation_id=conv.id, role="assistant", content=f"Wynik badania: {result}"))
+    db.commit()
+    return conversation_payload(get_owned_conversation(db, user, conversation_id), conv.patient)
+
+
+@router.post("/{conversation_id}/plan")
+def generate_case_plan(
+    conversation_id: uuid.UUID,
+    user: Annotated[User, Depends(get_approved_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    """Draft a structured SOR-style case description from the doctor's own interview."""
+    conv = get_owned_conversation_for_update(db, user, conversation_id)
+    _assert_open(conv)
+    assert_under_cap(db, user)
+    history = [{"role": message.role, "content": message.content} for message in conv.messages]
+    result = get_text_provider().complete(
+        create_case_description_prompt(
+            patient_scenario=conv.patient.scenario,
+            chat_history=history,
+        )
+    ).strip()
+    conv.interview_summary = result
     db.commit()
     return conversation_payload(get_owned_conversation(db, user, conversation_id), conv.patient)
 
