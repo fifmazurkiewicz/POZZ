@@ -24,6 +24,7 @@ export function SimulationClient() {
   const [mode, setMode] = useState<SimMode>("doctor_asks");
   const [draft, setDraft] = useState("");
   const [cardOpen, setCardOpen] = useState(true);
+  const [keywords, setKeywords] = useState("");
   const [patientVoice, setPatientVoice] = useState(true);
   const patientVoiceRef = useRef(true);
   const { busy, error, cancelled, run, cancel } = useAbortableAction();
@@ -54,6 +55,16 @@ export function SimulationClient() {
     }, (next) => { setSession(next); setMode(next.mode); setDraft(""); setCardOpen(true); });
   }
 
+  function generateFromKeywords() {
+    stop();
+    void run(async (signal) => {
+      const access = await bearer();
+      signal.throwIfAborted();
+      if (!access) throw new Error("Missing token");
+      return fetchNextPatient(access, keywords.trim() || undefined, signal);
+    }, (next) => { setSession(next); setMode(next.mode); setDraft(""); setCardOpen(true); setKeywords(""); });
+  }
+
   function submitTurn(text: string, audio?: Blob) {
     if (!session || session.ended_at || (!text && !audio)) return;
     stop();
@@ -80,7 +91,23 @@ export function SimulationClient() {
   return <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
     <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-divider)] px-3 py-1">
       <div><h1 className="text-lg">Symulacja</h1><p className="text-xs text-[var(--color-soft)]">Pacjent i ocena są generowane przez AI</p></div>
-      <button type="button" className="classical-btn text-sm" disabled={busy} onClick={nextPatient}>Następny pacjent</button>
+      <div className="flex shrink-0 items-center gap-2">
+        <input
+          type="text"
+          value={keywords}
+          maxLength={500}
+          disabled={busy}
+          aria-label="Słowa kluczowe pacjenta"
+          placeholder="np. zaburzenia neurologiczne, ból w klatce"
+          onChange={(event) => setKeywords(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Escape") setKeywords(""); }}
+          className="min-h-11 w-44 rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-2 text-sm"
+        />
+        <button type="button" className="classical-btn text-sm" disabled={busy} onClick={nextPatient}>Następny pacjent</button>
+        <button type="button" className="classical-btn classical-btn-primary text-sm" disabled={busy} onClick={generateFromKeywords}>
+          {busy ? "Generowanie…" : "Wygeneruj pacjenta"}
+        </button>
+      </div>
     </header>
     {session && !session.ended_at ? <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--color-divider)] px-3 py-1">
       {MODES.map((item) => <button key={item.id} type="button" disabled={busy} className={`classical-btn shrink-0 px-3 text-sm ${mode === item.id ? "classical-btn-primary" : ""}`} aria-pressed={mode === item.id} onClick={() => { stop(); setMode(item.id); }}>{item.label}</button>)}
