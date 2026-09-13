@@ -1,17 +1,25 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.auth.deps import get_approved_user
 from app.db import get_db
-from app.llm.provider import get_text_provider
 from app.interviews.service import recorded_transcript_payload
-from app.models import Conversation, Message, PatientUserState, User
+from app.llm.provider import get_text_provider
+from app.models import (
+    Conversation,
+    InterviewSuggestion,
+    InterviewTranscript,
+    Message,
+    Patient,
+    PatientUserState,
+    User,
+)
 from app.patients.service import (
     ROLE_FOR_MODE,
     assert_under_cap,
@@ -97,6 +105,46 @@ def get_conversation(
     return payload
 
 
+@router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_conversation(
+    conversation_id: uuid.UUID,
+    user: Annotated[User, Depends(get_approved_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    """Delete one owned conversation and its private, now-unused patient case."""
+    conv = get_owned_conversation_for_update(db, user, conversation_id)
+    patient_id = conv.patient_id
+    is_private = conv.patient.is_private
+
+    # Keep this portable for SQLite tests and deployments where FK cascades may
+    # not be enabled on every connection.
+    db.execute(
+        delete(InterviewSuggestion).where(
+            InterviewSuggestion.conversation_id == conv.id
+        )
+    )
+    db.execute(
+        delete(InterviewTranscript).where(
+            InterviewTranscript.conversation_id == conv.id
+        )
+    )
+    db.execute(delete(Message).where(Message.conversation_id == conv.id))
+    db.delete(conv)
+    db.flush()
+
+    if is_private:
+        has_other_conversation = db.scalar(
+            select(Conversation.id)
+            .where(Conversation.patient_id == patient_id)
+            .limit(1)
+        )
+        if has_other_conversation is None:
+            patient = db.get(Patient, patient_id)
+            if patient is not None:
+                db.delete(patient)
+    db.commit()
+
+
 @router.post("/{conversation_id}/turns")
 def post_turn(
     conversation_id: uuid.UUID,
@@ -154,8 +202,10 @@ def post_examination(
         {"role": message.role, "content": message.content} for message in conv.messages
     ]
     recorded = recorded_transcript_payload(db, conv)
-    if recorded is not None and not history:
-        history = [{"role": "transcript", "content": str(recorded.get("raw_text", ""))}]
+    if recorded is not None:
+        history.insert(
+            0, {"role": "transcript", "content": str(recorded.get("raw_text", ""))}
+        )
     result = (
         get_text_provider()
         .complete(
@@ -199,8 +249,10 @@ def generate_case_plan(
         {"role": message.role, "content": message.content} for message in conv.messages
     ]
     recorded = recorded_transcript_payload(db, conv)
-    if recorded is not None and not history:
-        history = [{"role": "transcript", "content": str(recorded.get("raw_text", ""))}]
+    if recorded is not None:
+        history.insert(
+            0, {"role": "transcript", "content": str(recorded.get("raw_text", ""))}
+        )
     result = (
         get_text_provider()
         .complete(
@@ -252,7 +304,7 @@ def finish_conversation(
     conv.patient.treatment_plan = reference_plan
     conv.user_treatment_response = treatment_plan
     conv.diagnosis_evaluation = evaluation
-    conv.ended_at = datetime.now(timezone.utc)
+    conv.ended_at = datetime.now(UTC)
     if conv.kind == "simulation":
         state = db.get(PatientUserState, (user.id, conv.patient_id))
         if state is None:
@@ -263,7 +315,7 @@ def finish_conversation(
             )
         else:
             state.status = "completed"
-            state.updated_at = datetime.now(timezone.utc)
+            state.updated_at = datetime.now(UTC)
     db.commit()
     return conversation_payload(
         get_owned_conversation(db, user, conversation_id), conv.patient

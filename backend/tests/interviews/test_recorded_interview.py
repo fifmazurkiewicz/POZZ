@@ -3,7 +3,7 @@ import uuid
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Conversation, InterviewTranscript
+from app.models import Conversation, InterviewTranscript, Message
 
 AUTH = {"Authorization": "Bearer dev-token"}
 
@@ -51,7 +51,7 @@ def test_recording_persists_full_transcript_without_audio(
 
 
 def test_plan_uses_recorded_transcript_and_returns_it(
-    sqlite_client: TestClient, monkeypatch
+    sqlite_client: TestClient, db_session: Session, monkeypatch
 ):
     raw_text = "Lekarz pyta o gorączkę. Pacjent zaprzecza."
 
@@ -78,6 +78,16 @@ def test_plan_uses_recorded_transcript_and_returns_it(
         headers=AUTH,
         files={"audio": ("wizyta.wav", b"audio", "audio/wav")},
     ).json()
+    # Any later annotations/results must supplement, not replace, the source
+    # transcript when the description is generated.
+    db_session.add(
+        Message(
+            conversation_id=uuid.UUID(created["conversation_id"]),
+            role="assistant",
+            content="Dodatkowa notatka kliniczna.",
+        )
+    )
+    db_session.commit()
 
     response = sqlite_client.post(
         f"/api/conversations/{created['conversation_id']}/plan",
