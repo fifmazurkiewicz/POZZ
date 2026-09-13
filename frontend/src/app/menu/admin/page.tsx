@@ -6,6 +6,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { ApiError } from "@/lib/api";
 import { fetchAdminUsers, type AdminUser, updateUser } from "@/lib/admin/api";
 import { canOpenAdmin, canRevokeApproval, partitionAdminUsers } from "@/lib/admin/access";
+import { MenuBackLink } from "@/components/MenuBackLink";
 
 export default function AdminPage() {
   const { isAdmin, userId, token, getAccessToken } = useAuth();
@@ -50,6 +51,7 @@ export default function AdminPage() {
 
   const { pending, approved } = partitionAdminUsers(users);
   return <main className="app-page flex-1">
+    <MenuBackLink />
     <h1 className="text-3xl">Administracja</h1>
     {error ? <p className="mt-4 text-sm text-amber-700" role="alert">{error}</p> : null}
     <p className="mt-3 text-sm text-[var(--color-soft)]">Ustaw miesięczny limit wydatków dla każdego konta. Wartość 0 oznacza brak limitu.</p>

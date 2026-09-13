@@ -11,6 +11,7 @@ from app.db import get_db
 from app.models import User
 from app.patients.service import assert_under_cap
 from app.settings import get_settings
+from app.voice.transcription import transcribe_upload
 
 router = APIRouter()
 VOICE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -36,28 +37,8 @@ async def transcribe_audio(
     """Transcribe one short doctor turn. Audio is processed in memory only."""
     assert_under_cap(db, user)
     settings = get_settings()
-    if settings.stt_provider.strip().lower() != "groq" or not settings.groq_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "stt_unavailable", "message": "Transkrypcja głosu nie jest skonfigurowana."},
-        )
-    content = await audio.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty audio upload")
-    if len(content) > 25 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Audio file is too large")
     async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(
-            "https://api.groq.com/openai/v1/audio/transcriptions",
-            headers={"Authorization": f"Bearer {settings.groq_api_key}"},
-            data={"model": "whisper-large-v3", "language": "pl", "response_format": "json"},
-            files={"file": (audio.filename or "turn.webm", content, audio.content_type or "audio/webm")},
-        )
-    if response.is_error:
-        raise HTTPException(status_code=502, detail="Speech transcription failed")
-    text = str(response.json().get("text", "")).strip()
-    if not text:
-        raise HTTPException(status_code=422, detail="No speech detected")
+        text = await transcribe_upload(audio, settings, client=client)
     return {"text": text}
 
 
@@ -77,16 +58,27 @@ async def patient_speech(
     if requested_voice_id and not VOICE_ID_RE.fullmatch(requested_voice_id):
         raise HTTPException(status_code=422, detail="Invalid voice_id")
     voice_id = requested_voice_id or settings.tts_voice_id
-    if settings.tts_provider.strip().lower() != "elevenlabs" or not settings.elevenlabs_api_key or not voice_id:
+    if (
+        settings.tts_provider.strip().lower() != "elevenlabs"
+        or not settings.elevenlabs_api_key
+        or not voice_id
+    ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "tts_unavailable", "message": "Głos pacjenta nie jest skonfigurowany."},
+            detail={
+                "code": "tts_unavailable",
+                "message": "Głos pacjenta nie jest skonfigurowany.",
+            },
         )
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
             f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
             headers={"xi-api-key": settings.elevenlabs_api_key, "Accept": "audio/mpeg"},
-            json={"text": text[:5000], "model_id": "eleven_multilingual_v2", "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}},
+            json={
+                "text": text[:5000],
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
+            },
         )
     if response.is_error:
         raise HTTPException(status_code=502, detail="Patient speech generation failed")

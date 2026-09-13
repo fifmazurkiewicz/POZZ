@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { apiFetch, apiUrl } from "@/lib/api";
+import { MenuBackLink } from "@/components/MenuBackLink";
 
 export default function PrivacyControlsPage() {
   const { token, getAccessToken } = useAuth();
@@ -34,6 +34,7 @@ export default function PrivacyControlsPage() {
   }
 
   return <main className="app-page flex-1 overflow-y-auto">
+    <MenuBackLink />
     <h1 className="text-3xl">Prywatność</h1>
     <p className="mt-3 text-sm text-[var(--color-soft)]">Pobierz dane zapisane przez POZZ albo usuń rozmowy, transkrypcje, oceny i prywatne przypadki.</p>
     <button className="classical-btn mt-5" type="button" onClick={() => void downloadExport()}>Pobierz moje dane</button>
@@ -44,6 +45,5 @@ export default function PrivacyControlsPage() {
       <button className="classical-btn" type="button" disabled={confirmation !== "USUŃ MOJE DANE"} onClick={() => void eraseContent()}>Usuń moją treść</button>
     </section>
     {message ? <p className="mt-4 text-sm" role="status">{message}</p> : null}
-    <Link className="classical-btn mt-6 inline-flex" href="/menu">Wróć do Menu</Link>
   </main>;
 }

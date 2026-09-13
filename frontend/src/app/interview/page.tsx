@@ -1,10 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { ApiError, apiFetch } from "@/lib/api";
-import { generateCasePlan, postTurn, speakerLabel, type SimMessage, type SimulationSession } from "@/lib/simulation/api";
+import { fetchConversation, generateCasePlan, postTurn, speakerLabel, type SimMessage, type SimulationSession } from "@/lib/simulation/api";
 import { useInterviewVoiceInput } from "@/lib/voice/useInterviewVoiceInput";
+import { uploadRecordedInterview } from "@/lib/interview/api";
+
+type InterviewMode = "recorded" | "manual";
 
 export default function InterviewPage() {
   const { token, getAccessToken } = useAuth();
@@ -16,6 +19,9 @@ export default function InterviewPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [planBusy, setPlanBusy] = useState(false);
+  const [mode, setMode] = useState<InterviewMode>("recorded");
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const restoredConversation = useRef<string | null>(null);
 
   const voice = useInterviewVoiceInput({
     token: token ?? "",
@@ -41,6 +47,27 @@ export default function InterviewPage() {
     if (session?.ended_at) voice.stop();
   }, [session, voice]);
 
+  useEffect(() => {
+    const conversationId = new URLSearchParams(window.location.search).get("conversation");
+    if (!conversationId || restoredConversation.current === conversationId) return;
+    restoredConversation.current = conversationId;
+    void (async () => {
+      const access = token ?? (await getAccessToken());
+      if (!access) return;
+      setBusy(true);
+      try {
+        const restored = await fetchConversation(access, conversationId);
+        setSession(restored);
+        setMessages(restored.messages ?? []);
+        setMode(restored.kind === "recorded_interview" ? "recorded" : "manual");
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Nie udało się otworzyć wywiadu.");
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [getAccessToken, token]);
+
   async function accessToken() {
     return token ?? (await getAccessToken());
   }
@@ -62,6 +89,24 @@ export default function InterviewPage() {
       setDraft("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Nie udało się utworzyć przypadku.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadRecording(event: FormEvent) {
+    event.preventDefault();
+    if (!audioFile) return;
+    const access = await accessToken();
+    if (!access) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await uploadRecordedInterview(access, audioFile, title);
+      setSession(created);
+      setMessages([]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Nie udało się przetworzyć nagrania.");
     } finally {
       setBusy(false);
     }
@@ -119,7 +164,25 @@ export default function InterviewPage() {
     <main className="app-page flex min-h-0 flex-1 flex-col">
       <h1 className="text-3xl">Wywiad</h1>
       {!session ? (
-        <form className="classical-card mt-5 max-w-2xl space-y-4 p-4" onSubmit={(event) => void start(event)}>
+        <>
+          <div className="mt-5 inline-flex rounded border border-[var(--color-divider)] p-1" role="group" aria-label="Sposób dodania wywiadu">
+            <button className={`classical-btn min-h-11 ${mode === "recorded" ? "classical-btn-primary" : ""}`} type="button" aria-pressed={mode === "recorded"} onClick={() => setMode("recorded")}>Nagranie</button>
+            <button className={`classical-btn min-h-11 ${mode === "manual" ? "classical-btn-primary" : ""}`} type="button" aria-pressed={mode === "manual"} onClick={() => setMode("manual")}>Ręcznie</button>
+          </div>
+          {mode === "recorded" ? (
+            <form className="classical-card mt-4 max-w-2xl space-y-4 p-4" onSubmit={(event) => void uploadRecording(event)}>
+              <div>
+                <h2 className="text-xl">Transkrypcja nagrania</h2>
+                <p className="mt-1 text-sm text-[var(--color-soft)]">Dodaj pełne nagranie rozmowy lekarza z pacjentem. Plik jest przetwarzany w pamięci i nie jest zapisywany.</p>
+              </div>
+              <label className="block text-sm" htmlFor="recording-title">Tytuł (opcjonalny)</label>
+              <input id="recording-title" className="min-h-11 w-full rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-3" value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} placeholder="np. Wizyta kontrolna" />
+              <label className="block text-sm" htmlFor="interview-audio">Plik audio, maks. 25 MB</label>
+              <input id="interview-audio" className="block min-h-11 w-full rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-2 text-sm" type="file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg" required onChange={(event) => setAudioFile(event.target.files?.[0] ?? null)} />
+              <button className="classical-btn classical-btn-primary" type="submit" disabled={busy || !audioFile}>{busy ? "Transkrypcja i rozpoznawanie rozmówców…" : "Transkrybuj nagranie"}</button>
+            </form>
+          ) : (
+        <form className="classical-card mt-4 max-w-2xl space-y-4 p-4" onSubmit={(event) => void start(event)}>
           <p className="text-sm text-[var(--color-soft)]">
             Utwórz prywatny przypadek ćwiczeniowy. Nie wpisuj danych umożliwiających identyfikację pacjenta.
           </p>
@@ -193,6 +256,8 @@ export default function InterviewPage() {
             Rozpocznij wywiad
           </button>
         </form>
+          )}
+        </>
       ) : (
         <>
           <div className="mt-4 flex items-center justify-between">
@@ -205,13 +270,35 @@ export default function InterviewPage() {
                 setMessages([]);
                 setScenario("");
                 setTitle("");
+                setAudioFile(null);
               }}
             >
               Nowy przypadek
             </button>
           </div>
           <section className="mt-5 min-h-0 flex-1 overflow-y-auto">
-            <ol className="space-y-3">
+            {session.recorded_transcript ? (
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl">Rozmowa</h2>
+                    <p className="mt-1 text-xs text-[var(--color-soft)]">Role rozmówców rozpoznano przez AI na podstawie tekstu. Zweryfikuj je z pełną transkrypcją.</p>
+                  </div>
+                </div>
+                <ol className="space-y-3">
+                  {session.recorded_transcript.turns.map((turn, index) => (
+                    <li className="classical-card p-3" key={`${index}-${turn.text.slice(0, 16)}`}>
+                      <p className="text-xs font-semibold text-[var(--color-soft)]">{turn.speaker === "doctor" ? "Lekarz" : turn.speaker === "patient" ? "Pacjent" : "Rozmówca"}</p>
+                      <p className="mt-1 whitespace-pre-wrap">{turn.text}</p>
+                    </li>
+                  ))}
+                </ol>
+                <details className="classical-card p-4">
+                  <summary className="cursor-pointer font-semibold">Pełna transkrypcja źródłowa</summary>
+                  <p className="mt-3 whitespace-pre-wrap text-sm">{session.recorded_transcript.raw_text}</p>
+                </details>
+              </div>
+            ) : <ol className="space-y-3">
               {messages.map((message) => (
                 <li className="classical-card p-3" key={message.id}>
                   <p className="text-xs font-semibold text-[var(--color-soft)]">
@@ -220,7 +307,7 @@ export default function InterviewPage() {
                   <p className="mt-1 whitespace-pre-wrap">{message.content}</p>
                 </li>
               ))}
-            </ol>
+            </ol>}
           </section>
           {session.interview_summary ? (
             <section className="classical-card mt-4 space-y-2 p-4" aria-label="Opis i plan">
@@ -244,8 +331,9 @@ export default function InterviewPage() {
               <div>
                 <h2 className="text-xl">Opis i plan</h2>
                 <p className="text-sm text-[var(--color-soft)]">
-                  Wygeneruj uporządkowany opis przypadku (wywiad, rozpoznanie różnicowe, zalecane badania, plan postępowania).
+                  Wygeneruj wersję roboczą: wywiad, różnicowanie, badania, leki, zalecenia, objawy alarmowe i dalszy plan.
                 </p>
+                <p className="mt-1 text-xs text-[var(--color-soft)]">Treść wygenerowana przez AI wymaga weryfikacji lekarza.</p>
               </div>
               <button
                 className="classical-btn classical-btn-primary text-sm"
@@ -257,7 +345,7 @@ export default function InterviewPage() {
               </button>
             </section>
           )}
-          <form className="mt-4 flex gap-2" onSubmit={(event) => void send(event)}>
+          {!session.recorded_transcript ? <form className="mt-4 flex gap-2" onSubmit={(event) => void send(event)}>
             <input
               className="min-h-11 min-w-0 flex-1 rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-3"
               value={draft}
@@ -282,7 +370,7 @@ export default function InterviewPage() {
             <button className="classical-btn classical-btn-primary" type="submit" disabled={busy || !draft.trim() || voice.listening}>
               Wyślij
             </button>
-          </form>
+          </form> : null}
           {voiceStatus ? (
             <p className="mt-1 text-xs text-[var(--color-soft)]" role="status">
               {voiceStatus}

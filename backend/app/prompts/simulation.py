@@ -169,7 +169,11 @@ def create_case_description_prompt(
                 "- Choroby przewlekłe, leki, alergie, wywiad rodzinny (jeśli wiadomo)\n"
                 "## ROZPOZNANIE RÓŻNICOWE\n- Główne podejrzenia / rozpoznanie różnicowe\n"
                 "## ZALECANE BADANIA\n- Lista badań adekwatnych do objawów\n"
-                "## PLAN POSTĘPOWANIA\n- Następne kroki, leczenie, zalecenia\n\n"
+                "## PROPONOWANE LEKI\n- Leki z dawkowaniem, przeciwwskazaniami i warunkami zastosowania; "
+                "jeśli brak podstaw, napisz to wprost\n"
+                "## ZALECENIA NIEFARMAKOLOGICZNE\n- Zalecenia i edukacja pacjenta\n"
+                "## OBJAWY ALARMOWE\n- Safety-netting i wskazania do pilnej pomocy\n"
+                "## PLAN POSTĘPOWANIA\n- Następne kroki i kontrola\n\n"
                 "Nie wymyślaj faktów spoza transkryptu i opisu sytuacji. "
                 "Nie ujawniaj ukrytych informacji ani wzorcowego rozpoznania, "
                 "jeśli nie wynikają wprost z przebiegu wywiadu."
@@ -182,6 +186,22 @@ def create_case_description_prompt(
                 f"PRZEBIEG WYWIADU:\n{transcript}"
             ),
         },
+    ]
+
+
+def create_speaker_transcript_prompt(*, raw_text: str) -> List[Dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Porządkujesz polską transkrypcję rozmowy medycznej. Na podstawie kontekstu "
+                "podziel tekst na wypowiedzi lekarza i pacjenta. Nie poprawiaj, nie streszczaj "
+                "i nie pomijaj treści. Zwróć wyłącznie JSON: "
+                '{"turns":[{"speaker":"doctor|patient|unknown","text":"..."}]}. '
+                "Jeśli roli nie da się wiarygodnie ustalić, użyj unknown."
+            ),
+        },
+        {"role": "user", "content": raw_text},
     ]
 
 

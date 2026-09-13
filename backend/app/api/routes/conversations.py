@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.auth.deps import get_approved_user
 from app.db import get_db
 from app.llm.provider import get_text_provider
+from app.interviews.service import recorded_transcript_payload
 from app.models import Conversation, Message, PatientUserState, User
 from app.patients.service import (
     ROLE_FOR_MODE,
@@ -34,16 +35,25 @@ def list_conversations(
     user: Annotated[User, Depends(get_approved_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict:
-    rows = db.scalars(
-        select(Conversation)
-        .options(joinedload(Conversation.patient), selectinload(Conversation.messages))
-        .where(Conversation.user_id == user.id)
-        .order_by(Conversation.created_at.desc())
-    ).unique().all()
+    rows = (
+        db.scalars(
+            select(Conversation)
+            .options(
+                joinedload(Conversation.patient), selectinload(Conversation.messages)
+            )
+            .where(Conversation.user_id == user.id)
+            .order_by(Conversation.created_at.desc())
+        )
+        .unique()
+        .all()
+    )
     return {
         "conversations": [
             conversation_payload(row, row.patient)
-            | {"created_at": row.created_at.isoformat() if row.created_at else None, "ended_at": row.ended_at.isoformat() if row.ended_at else None}
+            | {
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "ended_at": row.ended_at.isoformat() if row.ended_at else None,
+            }
             for row in rows
         ]
     }
@@ -66,7 +76,10 @@ def _assert_open(conv: Conversation) -> None:
     if conv.ended_at is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "conversation_completed", "message": "Wywiad został już zakończony."},
+            detail={
+                "code": "conversation_completed",
+                "message": "Wywiad został już zakończony.",
+            },
         )
 
 
@@ -77,7 +90,11 @@ def get_conversation(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict:
     conv = get_owned_conversation(db, user, conversation_id)
-    return conversation_payload(conv, conv.patient)
+    payload = conversation_payload(conv, conv.patient)
+    recorded = recorded_transcript_payload(db, conv)
+    if recorded is not None:
+        payload["recorded_transcript"] = recorded
+    return payload
 
 
 @router.post("/{conversation_id}/turns")
@@ -94,12 +111,16 @@ def post_turn(
         if body.mode not in ROLE_FOR_MODE:
             from fastapi import HTTPException, status
 
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown mode")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown mode"
+            )
         conv.mode = body.mode
     mode = conv.mode or "doctor_asks"
     role_to_play = ROLE_FOR_MODE[mode]
     history = [{"role": m.role, "content": m.content} for m in conv.messages]
-    user_msg = Message(conversation_id=conv.id, role="user", content=body.content.strip())
+    user_msg = Message(
+        conversation_id=conv.id, role="user", content=body.content.strip()
+    )
     db.add(user_msg)
     db.flush()
     prompt = create_simulation_prompt(
@@ -129,18 +150,39 @@ def post_examination(
     _assert_open(conv)
     assert_under_cap(db, user)
     examination = body.examination.strip()
-    history = [{"role": message.role, "content": message.content} for message in conv.messages]
-    result = get_text_provider().complete(
-        create_examination_prompt(
-            patient_scenario=conv.patient.scenario,
-            chat_history=history,
-            examination=examination,
+    history = [
+        {"role": message.role, "content": message.content} for message in conv.messages
+    ]
+    recorded = recorded_transcript_payload(db, conv)
+    if recorded is not None and not history:
+        history = [{"role": "transcript", "content": str(recorded.get("raw_text", ""))}]
+    result = (
+        get_text_provider()
+        .complete(
+            create_examination_prompt(
+                patient_scenario=conv.patient.scenario,
+                chat_history=history,
+                examination=examination,
+            )
         )
-    ).strip()
-    db.add(Message(conversation_id=conv.id, role="user", content=f"Badanie: {examination}"))
-    db.add(Message(conversation_id=conv.id, role="assistant", content=f"Wynik badania: {result}"))
+        .strip()
+    )
+    db.add(
+        Message(conversation_id=conv.id, role="user", content=f"Badanie: {examination}")
+    )
+    db.add(
+        Message(
+            conversation_id=conv.id,
+            role="assistant",
+            content=f"Wynik badania: {result}",
+        )
+    )
     db.commit()
-    return conversation_payload(get_owned_conversation(db, user, conversation_id), conv.patient)
+    refreshed = get_owned_conversation(db, user, conversation_id)
+    payload = conversation_payload(refreshed, conv.patient)
+    if recorded is not None:
+        payload["recorded_transcript"] = recorded
+    return payload
 
 
 @router.post("/{conversation_id}/plan")
@@ -153,16 +195,30 @@ def generate_case_plan(
     conv = get_owned_conversation_for_update(db, user, conversation_id)
     _assert_open(conv)
     assert_under_cap(db, user)
-    history = [{"role": message.role, "content": message.content} for message in conv.messages]
-    result = get_text_provider().complete(
-        create_case_description_prompt(
-            patient_scenario=conv.patient.scenario,
-            chat_history=history,
+    history = [
+        {"role": message.role, "content": message.content} for message in conv.messages
+    ]
+    recorded = recorded_transcript_payload(db, conv)
+    if recorded is not None and not history:
+        history = [{"role": "transcript", "content": str(recorded.get("raw_text", ""))}]
+    result = (
+        get_text_provider()
+        .complete(
+            create_case_description_prompt(
+                patient_scenario=conv.patient.scenario,
+                chat_history=history,
+            )
         )
-    ).strip()
+        .strip()
+    )
     conv.interview_summary = result
     db.commit()
-    return conversation_payload(get_owned_conversation(db, user, conversation_id), conv.patient)
+    payload = conversation_payload(
+        get_owned_conversation(db, user, conversation_id), conv.patient
+    )
+    if recorded is not None:
+        payload["recorded_transcript"] = recorded
+    return payload
 
 
 @router.post("/{conversation_id}/finish")
@@ -183,7 +239,9 @@ def finish_conversation(
             create_reference_plan_prompt(patient_scenario=conv.patient.scenario)
         ).strip()
     treatment_plan = body.treatment_plan.strip()
-    history = [{"role": message.role, "content": message.content} for message in conv.messages]
+    history = [
+        {"role": message.role, "content": message.content} for message in conv.messages
+    ]
     evaluation = provider.complete(
         create_evaluation_prompt(
             reference_plan=reference_plan,
@@ -198,9 +256,15 @@ def finish_conversation(
     if conv.kind == "simulation":
         state = db.get(PatientUserState, (user.id, conv.patient_id))
         if state is None:
-            db.add(PatientUserState(user_id=user.id, patient_id=conv.patient_id, status="completed"))
+            db.add(
+                PatientUserState(
+                    user_id=user.id, patient_id=conv.patient_id, status="completed"
+                )
+            )
         else:
             state.status = "completed"
             state.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return conversation_payload(get_owned_conversation(db, user, conversation_id), conv.patient)
+    return conversation_payload(
+        get_owned_conversation(db, user, conversation_id), conv.patient
+    )

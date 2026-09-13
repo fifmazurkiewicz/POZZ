@@ -17,6 +17,10 @@ export type SimulationSession = {
   user_treatment_response?: string | null;
   diagnosis_evaluation?: string | null;
   interview_summary?: string | null;
+  recorded_transcript?: {
+    raw_text: string;
+    turns: Array<{ speaker: "doctor" | "patient" | "unknown"; text: string }>;
+  } | null;
 };
 
 export async function fetchNextPatient(token: string, keywords?: string, signal?: AbortSignal): Promise<SimulationSession> {
