@@ -63,31 +63,54 @@ function makeSession() {
   };
 }
 
+async function openKeywordsDialog() {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Wygeneruj pacjenta" }));
+  });
+}
+
 describe("SimulationClient — Wygeneruj pacjenta", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
   });
 
-  it("passes keywords to fetchNextPatient when provided", async () => {
+  it("opens a dialog when Wygeneruj pacjenta is clicked and the input is not in the header", async () => {
     render(<SimulationClient />);
-    const input = screen.getByLabelText("Słowa kluczowe pacjenta") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "zaburzenia neurologiczne" } });
+    const dialog = document.querySelector("dialog");
+    expect(dialog?.hasAttribute("open")).toBe(false);
+    expect(screen.getByRole("button", { name: "Wygeneruj pacjenta" })).toBeTruthy();
+    await openKeywordsDialog();
+    expect(dialog?.hasAttribute("open")).toBe(true);
+    expect(screen.getByLabelText(/Słowa kluczowe pacjenta/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Generuj" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Anuluj" })).toBeTruthy();
+  });
+
+  it("passes trimmed keywords to fetchNextPatient when provided", async () => {
+    vi.mocked(fetchNextPatient).mockClear();
+    render(<SimulationClient />);
+    await openKeywordsDialog();
+    const textarea = screen.getByLabelText(/Słowa kluczowe pacjenta/) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "  zaburzenia neurologiczne  " } });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Wygeneruj pacjenta" }));
+      fireEvent.click(screen.getByRole("button", { name: "Generuj" }));
     });
     expect(fetchNextPatient).toHaveBeenCalledWith("token", "zaburzenia neurologiczne", expect.anything());
   });
 
-  it("calls fetchNextPatient without keywords when input is empty", async () => {
+  it("calls fetchNextPatient without keywords when the dialog is submitted empty", async () => {
+    vi.mocked(fetchNextPatient).mockClear();
     render(<SimulationClient />);
+    await openKeywordsDialog();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Wygeneruj pacjenta" }));
+      fireEvent.click(screen.getByRole("button", { name: "Generuj" }));
     });
     expect(fetchNextPatient).toHaveBeenCalledWith("token", undefined, expect.anything());
   });
 
   it("Następny pacjent still calls fetchNextPatient without keywords", async () => {
+    vi.mocked(fetchNextPatient).mockClear();
     render(<SimulationClient />);
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Następny pacjent" }));
@@ -95,18 +118,20 @@ describe("SimulationClient — Wygeneruj pacjenta", () => {
     expect(fetchNextPatient).toHaveBeenCalledWith("token", undefined, expect.anything());
   });
 
-  it("Escape clears the keyword input", () => {
+  it("Anuluj closes the dialog without calling fetchNextPatient", async () => {
     vi.mocked(fetchNextPatient).mockClear();
     render(<SimulationClient />);
-    const input = screen.getByLabelText("Słowa kluczowe pacjenta") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "x" } });
-    expect(input.value).toBe("x");
-    fireEvent.keyDown(input, { key: "Escape" });
-    expect(input.value).toBe("");
+    const dialog = document.querySelector("dialog");
+    await openKeywordsDialog();
+    fireEvent.change(screen.getByLabelText(/Słowa kluczowe pacjenta/), { target: { value: "x" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Anuluj" }));
+    });
     expect(fetchNextPatient).not.toHaveBeenCalled();
+    expect(dialog?.hasAttribute("open")).toBe(false);
   });
 
-  it("disables the input and both buttons while busy", async () => {
+  it("disables the dialog input and submit button while busy", async () => {
     vi.mocked(fetchNextPatient).mockImplementationOnce(
       async () => {
         await new Promise((r) => setTimeout(r, 30));
@@ -115,18 +140,17 @@ describe("SimulationClient — Wygeneruj pacjenta", () => {
     );
 
     render(<SimulationClient />);
-    const input = screen.getByLabelText("Słowa kluczowe pacjenta") as HTMLInputElement;
-    const generateButton = screen.getByRole("button", { name: "Wygeneruj pacjenta" }) as HTMLButtonElement;
-    const nextButton = screen.getByRole("button", { name: "Następny pacjent" }) as HTMLButtonElement;
+    await openKeywordsDialog();
+    const textarea = screen.getByLabelText(/Słowa kluczowe pacjenta/) as HTMLTextAreaElement;
+    const submit = screen.getByRole("button", { name: /Generuj|Generowanie/ }) as HTMLButtonElement;
 
-    fireEvent.click(generateButton);
-    await act(async () => {});
+    await act(async () => {
+      fireEvent.click(submit);
+    });
 
-    expect(input.disabled).toBe(true);
-    expect(generateButton.disabled).toBe(true);
-    expect(nextButton.disabled).toBe(true);
+    expect(textarea.disabled).toBe(true);
+    expect(submit.disabled).toBe(true);
 
-    // Let the slow action settle so cleanup() does not warn.
     await act(async () => {
       await new Promise((r) => setTimeout(r, 50));
     });

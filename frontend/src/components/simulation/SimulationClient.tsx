@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { apiUrl } from "@/lib/api";
@@ -17,6 +17,8 @@ const MODES: { id: SimMode; label: string }[] = [
   { id: "meta_ask", label: "Pytaj AI" },
 ];
 
+const KEYWORDS_MAX = 500;
+
 export function SimulationClient() {
   const { token, getAccessToken } = useAuth();
   const searchParams = useSearchParams();
@@ -25,6 +27,11 @@ export function SimulationClient() {
   const [draft, setDraft] = useState("");
   const [cardOpen, setCardOpen] = useState(true);
   const [keywords, setKeywords] = useState("");
+  const [keywordsOpen, setKeywordsOpen] = useState(false);
+  const keywordsDialog = useRef<HTMLDialogElement>(null);
+  const keywordsFieldId = useId();
+  const keywordsTitleId = useId();
+  const keywordsHintId = useId();
   const [patientVoice, setPatientVoice] = useState(true);
   const patientVoiceRef = useRef(true);
   const { busy, error, cancelled, run, cancel } = useAbortableAction();
@@ -32,6 +39,11 @@ export function SimulationClient() {
   const stopVoice = voice.stop;
   const bearer = useCallback(async () => token ?? await getAccessToken(), [token, getAccessToken]);
   const stop = useCallback(() => { cancel(); stopVoice(); }, [cancel, stopVoice]);
+
+  useEffect(() => {
+    if (keywordsOpen) keywordsDialog.current?.showModal();
+    else keywordsDialog.current?.close();
+  }, [keywordsOpen]);
 
   useEffect(() => {
     const id = searchParams.get("conversation");
@@ -55,14 +67,25 @@ export function SimulationClient() {
     }, (next) => { setSession(next); setMode(next.mode); setDraft(""); setCardOpen(true); });
   }
 
-  function generateFromKeywords() {
+  function openKeywordsDialog() {
+    stop();
+    setKeywordsOpen(true);
+  }
+
+  function closeKeywordsDialog() {
+    setKeywords("");
+    setKeywordsOpen(false);
+  }
+
+  function generateFromKeywords(event: FormEvent) {
+    event.preventDefault();
     stop();
     void run(async (signal) => {
       const access = await bearer();
       signal.throwIfAborted();
       if (!access) throw new Error("Missing token");
       return fetchNextPatient(access, keywords.trim() || undefined, signal);
-    }, (next) => { setSession(next); setMode(next.mode); setDraft(""); setCardOpen(true); setKeywords(""); });
+    }, (next) => { setSession(next); setMode(next.mode); setDraft(""); setCardOpen(true); setKeywords(""); setKeywordsOpen(false); });
   }
 
   function submitTurn(text: string, audio?: Blob) {
@@ -92,21 +115,8 @@ export function SimulationClient() {
     <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-divider)] px-3 py-1">
       <div><h1 className="text-lg">Symulacja</h1><p className="text-xs text-[var(--color-soft)]">Pacjent i ocena są generowane przez AI</p></div>
       <div className="flex shrink-0 items-center gap-2">
-        <input
-          type="text"
-          value={keywords}
-          maxLength={500}
-          disabled={busy}
-          aria-label="Słowa kluczowe pacjenta"
-          placeholder="np. zaburzenia neurologiczne, ból w klatce"
-          onChange={(event) => setKeywords(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Escape" && keywords) setKeywords(""); }}
-          className="min-h-11 w-44 rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-2 text-sm"
-        />
         <button type="button" className="classical-btn text-sm" disabled={busy} onClick={nextPatient}>Następny pacjent</button>
-        <button type="button" className="classical-btn classical-btn-primary text-sm" disabled={busy} onClick={generateFromKeywords}>
-          {busy ? "Generowanie…" : "Wygeneruj pacjenta"}
-        </button>
+        <button type="button" className="classical-btn classical-btn-primary text-sm" disabled={busy} onClick={openKeywordsDialog}>Wygeneruj pacjenta</button>
       </div>
     </header>
     {session && !session.ended_at ? <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--color-divider)] px-3 py-1">
@@ -122,6 +132,39 @@ export function SimulationClient() {
     </section>
     {error || voice.error ? <p className="shrink-0 px-3 py-2 text-sm" role="alert">{error || voice.error}</p> : null}
     {session ? <InterviewActions key={session.conversation_id} session={session} active={active} busy={busy} error={error} cancelled={cancelled} getToken={bearer} onStop={stop} onUpdate={setSession} run={run} /> : busy ? <button className="classical-btn m-3" type="button" onClick={stop}>Zatrzymaj</button> : null}
+    <dialog
+      ref={keywordsDialog}
+      className="interview-dialog classical-card"
+      aria-labelledby={keywordsTitleId}
+      aria-describedby={keywordsHintId}
+    >
+      <form onSubmit={generateFromKeywords} className="space-y-4">
+        <h2 id={keywordsTitleId} className="text-xl">Wygeneruj pacjenta</h2>
+        <p id={keywordsHintId} className="text-sm text-[var(--color-soft)]">
+          Podaj słowa kluczowe, np. <em>zaburzenia neurologiczne</em>, <em>ból w klatce</em>. Puste pole = losowy pacjent z katalogu.
+        </p>
+        <label className="block text-sm" htmlFor={keywordsFieldId}>Słowa kluczowe (opcjonalne)</label>
+        <textarea
+          id={keywordsFieldId}
+          aria-label="Słowa kluczowe pacjenta"
+          autoFocus
+          rows={2}
+          maxLength={KEYWORDS_MAX}
+          className="w-full rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-3"
+          value={keywords}
+          disabled={busy}
+          onChange={(event) => setKeywords(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); closeKeywordsDialog(); } }}
+          placeholder="np. zaburzenia neurologiczne, ból w klatce"
+        />
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" className="classical-btn" onClick={closeKeywordsDialog}>Anuluj</button>
+          <button type="submit" className="classical-btn classical-btn-primary" disabled={busy}>
+            {busy ? "Generowanie…" : "Generuj"}
+          </button>
+        </div>
+      </form>
+    </dialog>
     <ConversationComposer draft={draft} onDraftChange={setDraft} onSend={(event) => { event.preventDefault(); submitTurn(draft.trim()); }} disabled={busy || !session || !!session.ended_at} placeholder={session?.ended_at ? "Wywiad zakończony" : composerPlaceholder(mode)} patientVoice={patientVoice} speaking={voice.speaking} listening={voice.listening} onVoiceChange={(enabled) => { patientVoiceRef.current = enabled; setPatientVoice(enabled); if (!enabled) stopVoice(); }} onListeningChange={(enabled) => { if (enabled) void voice.startRecording((blob) => submitTurn("", blob)); else voice.finishRecording(); }} />
   </main>;
 }
