@@ -319,7 +319,7 @@ export default function InterviewPage() {
                 </div>
               </div>
               {planOpen ? (
-                <pre id="interview-plan-body" className="whitespace-pre-wrap rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-3 text-sm">
+                <pre id="interview-plan-body" className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-3 text-sm">
                   {session.interview_summary}
                 </pre>
               ) : null}
