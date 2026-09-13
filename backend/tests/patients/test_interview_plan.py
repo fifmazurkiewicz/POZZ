@@ -1,5 +1,6 @@
 import uuid
 
+import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -41,9 +42,13 @@ def test_plan_generates_and_persists_interview_summary(
             captured["messages"] = messages
             return "**WYWIAD**\n- Skargi: ból brzucha.\n\n**ZALECANE BADANIA**\n- USG jamy brzusznej."
 
-    monkeypatch.setattr("app.api.routes.conversations.get_text_provider", lambda: Provider())
+    monkeypatch.setattr(
+        "app.api.routes.conversations.get_text_provider", lambda: Provider()
+    )
 
-    response = sqlite_client.post(f"/api/conversations/{conversation_id}/plan", headers=AUTH, json={})
+    response = sqlite_client.post(
+        f"/api/conversations/{conversation_id}/plan", headers=AUTH, json={}
+    )
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["interview_summary"].startswith("**WYWIAD**")
@@ -70,7 +75,9 @@ def test_plan_rejects_completed_conversation(sqlite_client: TestClient):
         ).status_code
         == 200
     )
-    response = sqlite_client.post(f"/api/conversations/{conversation_id}/plan", headers=AUTH, json={})
+    response = sqlite_client.post(
+        f"/api/conversations/{conversation_id}/plan", headers=AUTH, json={}
+    )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "conversation_completed"
 
@@ -79,18 +86,55 @@ def test_plan_enforces_ownership_and_spend_cap(
     sqlite_client: TestClient, db_session: Session
 ):
     conversation_id = _manual_conversation(sqlite_client)
-    other = User(id=uuid.uuid4(), email="other@example.com", is_approved=True, spend_cap_usd=10)
+    other = User(
+        id=uuid.uuid4(), email="other@example.com", is_approved=True, spend_cap_usd=10
+    )
     sqlite_client.app.dependency_overrides[get_current_user] = lambda: other
     try:
-        assert sqlite_client.post(
-            f"/api/conversations/{conversation_id}/plan", headers=AUTH, json={}
-        ).status_code == 404
+        assert (
+            sqlite_client.post(
+                f"/api/conversations/{conversation_id}/plan", headers=AUTH, json={}
+            ).status_code
+            == 404
+        )
     finally:
         del sqlite_client.app.dependency_overrides[get_current_user]
 
     conv = db_session.get(Conversation, uuid.UUID(conversation_id))
     db_session.add(UsageLedger(user_id=conv.user_id, action_type="test", cost_usd=10))
     db_session.commit()
-    capped = sqlite_client.post(f"/api/conversations/{conversation_id}/plan", headers=AUTH, json={})
+    capped = sqlite_client.post(
+        f"/api/conversations/{conversation_id}/plan", headers=AUTH, json={}
+    )
     assert capped.status_code == 403
     assert capped.json()["detail"]["code"] == "spend_cap_exceeded"
+
+
+def test_plan_provider_error_keeps_cors_headers(
+    sqlite_client_no_raise: TestClient, monkeypatch
+):
+    conversation_id = _manual_conversation(sqlite_client_no_raise)
+
+    class Provider:
+        def complete(self, messages):
+            request = httpx.Request(
+                "POST", "https://openrouter.ai/api/v1/chat/completions"
+            )
+            response = httpx.Response(502, request=request, text="bad gateway")
+            raise httpx.HTTPStatusError("502", request=request, response=response)
+
+    monkeypatch.setattr(
+        "app.api.routes.conversations.get_text_provider", lambda: Provider()
+    )
+    response = sqlite_client_no_raise.post(
+        f"/api/conversations/{conversation_id}/plan",
+        headers={**AUTH, "Origin": "http://localhost:3000"},
+        json={},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == {
+        "code": "provider_error",
+        "message": "Nie udało się wykonać operacji. Spróbuj ponownie.",
+    }
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"

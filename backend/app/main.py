@@ -1,9 +1,10 @@
 import logging
 
 import httpx
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.api.router import api_router
 from app.settings import get_settings
@@ -12,22 +13,24 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-app = FastAPI(title="POZZ API", version="0.1.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.include_router(api_router, prefix="/api")
-
-
 PROVIDER_ERROR_MESSAGE = "Nie udało się wykonać operacji. Spróbuj ponownie."
 
 
-@app.exception_handler(Exception)
-async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+class UnhandledExceptionMiddleware(BaseHTTPMiddleware):
+    """Translate uncaught failures before the response passes through CORS."""
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        try:
+            return await call_next(request)
+        # This is the deliberate last-resort application boundary. Specific
+        # HTTP errors have already been handled by FastAPI inside this layer.
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(request, exc)
+
+
+def _error_response(request: Request, exc: Exception) -> JSONResponse:
     """Map uncaught provider/network failures to a Polish JSON error.
 
     - `httpx.HTTPError` (timeouts, connection errors, upstream 4xx/5xx) → 502
@@ -40,14 +43,32 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     """
     if isinstance(exc, httpx.HTTPError):
         status_code = status.HTTP_502_BAD_GATEWAY
-        logger.warning("Provider failure on %s %s: %s", request.method, request.url.path, exc)
+        logger.warning(
+            "Provider failure on %s %s: %s", request.method, request.url.path, exc
+        )
     else:
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         logger.exception("Unhandled error on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=status_code,
-        content={"detail": {"code": "provider_error", "message": PROVIDER_ERROR_MESSAGE}},
+        content={
+            "detail": {"code": "provider_error", "message": PROVIDER_ERROR_MESSAGE}
+        },
     )
+
+
+app = FastAPI(title="POZZ API", version="0.1.0")
+# Middleware added later is outermost. CORS must wrap the error translator so
+# even an uncaught provider failure remains readable by the browser.
+app.add_middleware(UnhandledExceptionMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(api_router, prefix="/api")
 
 
 @app.get("/")
