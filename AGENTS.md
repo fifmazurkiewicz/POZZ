@@ -64,6 +64,7 @@ Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empt
 - Bottom nav is Simulation / Interview / Menu.
 - Admin: bulk-generate patient catalog, spend caps, approval queue. Database wipe is admin-only with typed confirmation.
 - All API errors surface as Polish JSON `{ "code": "...", "message": "..." }` (e.g. `spend_cap_exceeded`, `provider_error`, `account_pending_approval`); toasts show the Polish message, never raw English.
+- POZZ scope extends beyond doctor training to real-time clinical assistance in settings like SOR / izba przyjęć; Wywiad manual mode has an AI-suggested "Zrób badanie" button (recommended investigations / follow-ups / insights) the doctor can accept or ignore mid-interview.
 
 ## Learned Workspace Facts
 
@@ -81,3 +82,4 @@ Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empt
 - Privacy: `GET /api/privacy/export` + `DELETE /api/privacy/content` (typed confirmation `USUŃ MOJE DANE`); UI at `/menu/privacy`, informational page `/privacy`. Content erase keeps the auth account.
 - `diarization_test/` is experimental Gradio work — out of MVP deploy.
 - Graft `/graft/` remains gitignored. Native `graft build` may fail without tree-sitter build tools; MCP + rule wiring is enough until then.
+- Wywiad "Nagranie" tab is a live recorder (mic → in-memory `Blob` → `POST /api/interviews/recordings`); no file upload, no durable audio. Implementation: `frontend/src/components/interview/RecordedRecorder.tsx`. Same backend endpoint as the legacy upload form — STT + speaker diarization.
