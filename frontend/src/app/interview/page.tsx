@@ -19,6 +19,7 @@ export default function InterviewPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [planBusy, setPlanBusy] = useState(false);
+  const [planOpen, setPlanOpen] = useState(true);
   const [mode, setMode] = useState<InterviewMode>("recorded");
   const restoredConversation = useRef<string | null>(null);
 
@@ -300,6 +301,15 @@ export default function InterviewPage() {
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-xl">Opis i plan</h2>
                 <div className="flex gap-2">
+                  <button
+                    className="classical-btn text-sm"
+                    type="button"
+                    aria-expanded={planOpen}
+                    aria-controls="interview-plan-body"
+                    onClick={() => setPlanOpen((open) => !open)}
+                  >
+                    {planOpen ? "Ukryj opis" : "Pokaż opis"}
+                  </button>
                   <button className="classical-btn text-sm" type="button" disabled={planBusy} onClick={() => void generatePlan()}>
                     {planBusy ? "Generowanie…" : "Odśwież opis"}
                   </button>
@@ -308,9 +318,11 @@ export default function InterviewPage() {
                   </button>
                 </div>
               </div>
-              <pre className="whitespace-pre-wrap rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-3 text-sm">
-                {session.interview_summary}
-              </pre>
+              {planOpen ? (
+                <pre id="interview-plan-body" className="whitespace-pre-wrap rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-3 text-sm">
+                  {session.interview_summary}
+                </pre>
+              ) : null}
             </section>
           ) : (
             <section className="classical-card mt-4 flex items-center justify-between gap-2 p-4" aria-label="Opis i plan">
