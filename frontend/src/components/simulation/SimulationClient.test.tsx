@@ -107,17 +107,17 @@ describe("SimulationClient — Wygeneruj pacjenta", () => {
   });
 
   it("disables the input and both buttons while busy", async () => {
-    fetchNextPatient.mockImplementationOnce(
+    vi.mocked(fetchNextPatient).mockImplementationOnce(
       async () => {
         await new Promise((r) => setTimeout(r, 30));
-        return makeSession();
+        return makeSession() as unknown as Awaited<ReturnType<typeof fetchNextPatient>>;
       },
     );
 
     render(<SimulationClient />);
     const input = screen.getByLabelText("Słowa kluczowe pacjenta") as HTMLInputElement;
-    const generateButton = screen.getByRole("button", { name: "Wygeneruj pacjenta" });
-    const nextButton = screen.getByRole("button", { name: "Następny pacjent" });
+    const generateButton = screen.getByRole("button", { name: "Wygeneruj pacjenta" }) as HTMLButtonElement;
+    const nextButton = screen.getByRole("button", { name: "Następny pacjent" }) as HTMLButtonElement;
 
     fireEvent.click(generateButton);
     await act(async () => {});
