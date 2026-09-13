@@ -8,6 +8,13 @@
 
 **Tech Stack:** Next.js PWA (App Router), React 19, vitest + jsdom + `@testing-library/react`, existing CSS variable theme.
 
+## Decisions
+
+- **2026-09-13 — Wywiad "Opis i plan" collapse is in-memory only.** No localStorage / URL persistence. Precedent: `cardOpen` on the Symulacja "Karta pacjenta". Source of truth: `frontend/src/app/interview/page.tsx` `planOpen` state.
+- **2026-09-13 — Symulacja header keeps both buttons.** "Następny pacjent" (shared catalog) and "Wygeneruj pacjenta" (keyword-driven) coexist. Only the latter passes non-empty `keywords` to `fetchNextPatient`. Both call `POST /api/patients/next`. Keyword-driven generation always produces a **private** patient (`is_private=true`, `created_by=current_user`) — no shared-catalog filtering on keywords.
+
+Canonical decisions live in the spec: `docs/superpowers/specs/2026-09-13-interview-collapsible-and-keyword-patient-design.md` (Decisions section).
+
 ## Global Constraints
 
 - Polish UI strings; English code/comments/commits. Preserve existing affordances.

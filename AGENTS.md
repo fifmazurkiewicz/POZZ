@@ -83,3 +83,4 @@ Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empt
 - `diarization_test/` is experimental Gradio work — out of MVP deploy.
 - Graft `/graft/` remains gitignored. Native `graft build` may fail without tree-sitter build tools; MCP + rule wiring is enough until then.
 - Wywiad "Nagranie" tab is a live recorder (mic → in-memory `Blob` → `POST /api/interviews/recordings`); no file upload, no durable audio. Implementation: `frontend/src/components/interview/RecordedRecorder.tsx`. Same backend endpoint as the legacy upload form — STT + speaker diarization.
+- Wywiad "Opis i plan" card (after generation) has an "Ukryj opis" / "Pokaż opis" toggle; collapse state is in-memory only (no localStorage). Sim header has both "Następny pacjent" (random catalog) and "Wygeneruj pacjenta" with a keyword input — non-empty keywords generate a private patient on `POST /api/patients/next`. Escape clears the keyword input.

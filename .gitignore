@@ -15,6 +15,7 @@ node_modules/
 dist/
 build/
 .next/
+frontend/tsconfig.tsbuildinfo
 __pycache__/
 *.pyc
 .venv/
