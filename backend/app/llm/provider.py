@@ -111,6 +111,60 @@ class OpenRouterProvider:
         return response.json()["choices"][0]["message"]["content"]
 
 
+class GoogleGeminiProvider:
+    def __init__(self, api_key: str, model: str) -> None:
+        self.api_key = api_key
+        self.model = model.removeprefix("google/")
+
+    def complete(self, messages: list[dict[str, str]]) -> str:
+        system_parts = [
+            message["content"] for message in messages if message["role"] == "system"
+        ]
+        contents = [
+            {
+                "role": "model" if message["role"] == "assistant" else "user",
+                "parts": [{"text": message["content"]}],
+            }
+            for message in messages
+            if message["role"] != "system"
+        ]
+        payload: dict[str, object] = {"contents": contents}
+        if system_parts:
+            payload["systemInstruction"] = {
+                "parts": [{"text": "\n\n".join(system_parts)}]
+            }
+        response = httpx.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
+            headers={
+                "x-goog-api-key": self.api_key,
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=60.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return "".join(
+            part.get("text", "")
+            for part in data["candidates"][0]["content"]["parts"]
+            if isinstance(part, dict)
+        )
+
+
+class FallbackTextProvider:
+    def __init__(
+        self, primary: TextCompletionProvider, fallback: TextCompletionProvider
+    ) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    def complete(self, messages: list[dict[str, str]]) -> str:
+        try:
+            return self.primary.complete(messages)
+        except httpx.HTTPError:
+            return self.fallback.complete(messages)
+
+
 class MockTextProvider:
     def complete(self, messages: list[dict[str, str]]) -> str:
         system = messages[0]["content"] if messages else ""
@@ -131,5 +185,13 @@ class MockTextProvider:
 def get_text_provider() -> TextCompletionProvider:
     settings = get_settings()
     if settings.openrouter_api_key:
-        return OpenRouterProvider(settings.openrouter_api_key, settings.text_model)
+        primary = OpenRouterProvider(settings.openrouter_api_key, settings.text_model)
+        if settings.google_api_key:
+            return FallbackTextProvider(
+                primary,
+                GoogleGeminiProvider(settings.google_api_key, settings.text_model),
+            )
+        return primary
+    if settings.google_api_key:
+        return GoogleGeminiProvider(settings.google_api_key, settings.text_model)
     return MockTextProvider()
