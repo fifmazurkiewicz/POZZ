@@ -123,72 +123,72 @@ export default function InterviewPage() {
           <p className="text-sm text-[var(--color-soft)]">
             Utwórz prywatny przypadek ćwiczeniowy. Nie wpisuj danych umożliwiających identyfikację pacjenta.
           </p>
-          <label className="block text-sm" htmlFor="case-title">
-            Tytuł przypadku
-            <div className="mt-1 flex gap-2">
-              <input
-                id="case-title"
-                className="min-h-11 min-w-0 flex-1 rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-3"
-                value={title}
-                maxLength={120}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="np. Ból w klatce piersiowej"
-              />
+          <div className="block text-sm">
+            <div className="flex items-center gap-1">
+              <label htmlFor="case-title">Tytuł przypadku</label>
               <button
                 type="button"
-                className="classical-btn inline-flex shrink-0 items-center gap-2"
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-[var(--color-soft)] hover:text-[var(--color-accent)] disabled:opacity-50"
                 aria-pressed={titleVoice.listening}
-                aria-label="Mikrofon — tytuł przypadku"
+                aria-label={titleVoice.listening ? "Wyślij nagranie — tytuł przypadku" : "Dyktuj tytuł przypadku"}
+                title={titleVoice.listening ? "Wyślij nagranie" : "Dyktuj"}
                 disabled={titleMicDisabled}
                 onClick={titleVoice.toggle}
               >
-                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <rect x="9" y="2" width="6" height="12" rx="3" />
                   <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" />
                 </svg>
-                {titleVoice.listening ? "Wyślij nagranie" : "Mikrofon"}
               </button>
             </div>
+            <input
+              id="case-title"
+              className="mt-1 min-h-11 w-full rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-3"
+              value={title}
+              maxLength={120}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="np. Ból w klatce piersiowej"
+            />
             {titleVoiceStatus ? (
               <p className="mt-1 text-xs text-[var(--color-soft)]" role="status">
                 {titleVoiceStatus}
               </p>
             ) : null}
-          </label>
-          <label className="block text-sm" htmlFor="case-scenario">
-            Opis pacjenta i sytuacji
-            <div className="mt-1 flex gap-2">
-              <textarea
-                id="case-scenario"
-                className="min-h-48 min-w-0 flex-1 rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-3"
-                value={scenario}
-                minLength={20}
-                maxLength={12000}
-                required
-                onChange={(event) => setScenario(event.target.value)}
-                placeholder="Opisz objawy, wiek oraz istotny kontekst medyczny…"
-              />
+          </div>
+          <div className="block text-sm">
+            <div className="flex items-center gap-1">
+              <label htmlFor="case-scenario">Opis pacjenta i sytuacji</label>
               <button
                 type="button"
-                className="classical-btn inline-flex shrink-0 items-center gap-2"
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-[var(--color-soft)] hover:text-[var(--color-accent)] disabled:opacity-50"
                 aria-pressed={scenarioVoice.listening}
-                aria-label="Mikrofon — opis pacjenta"
+                aria-label={scenarioVoice.listening ? "Wyślij nagranie — opis pacjenta" : "Dyktuj opis pacjenta"}
+                title={scenarioVoice.listening ? "Wyślij nagranie" : "Dyktuj"}
                 disabled={scenarioMicDisabled}
                 onClick={scenarioVoice.toggle}
               >
-                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <rect x="9" y="2" width="6" height="12" rx="3" />
                   <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" />
                 </svg>
-                {scenarioVoice.listening ? "Wyślij nagranie" : "Mikrofon"}
               </button>
             </div>
+            <textarea
+              id="case-scenario"
+              className="mt-1 min-h-48 w-full rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-3"
+              value={scenario}
+              minLength={20}
+              maxLength={12000}
+              required
+              onChange={(event) => setScenario(event.target.value)}
+              placeholder="Opisz objawy, wiek oraz istotny kontekst medyczny…"
+            />
             {scenarioVoiceStatus ? (
               <p className="mt-1 text-xs text-[var(--color-soft)]" role="status">
                 {scenarioVoiceStatus}
               </p>
             ) : null}
-          </label>
+          </div>
           <button className="classical-btn classical-btn-primary" disabled={busy || scenario.trim().length < 20} type="submit">
             Rozpocznij wywiad
           </button>
