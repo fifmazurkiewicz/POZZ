@@ -100,7 +100,7 @@ export function SimulationClient() {
           aria-label="Słowa kluczowe pacjenta"
           placeholder="np. zaburzenia neurologiczne, ból w klatce"
           onChange={(event) => setKeywords(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Escape") setKeywords(""); }}
+          onKeyDown={(event) => { if (event.key === "Escape" && keywords) setKeywords(""); }}
           className="min-h-11 w-44 rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-2 text-sm"
         />
         <button type="button" className="classical-btn text-sm" disabled={busy} onClick={nextPatient}>Następny pacjent</button>

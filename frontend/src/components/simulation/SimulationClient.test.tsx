@@ -96,11 +96,39 @@ describe("SimulationClient — Wygeneruj pacjenta", () => {
   });
 
   it("Escape clears the keyword input", () => {
+    vi.mocked(fetchNextPatient).mockClear();
     render(<SimulationClient />);
     const input = screen.getByLabelText("Słowa kluczowe pacjenta") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "x" } });
     expect(input.value).toBe("x");
     fireEvent.keyDown(input, { key: "Escape" });
     expect(input.value).toBe("");
+    expect(fetchNextPatient).not.toHaveBeenCalled();
+  });
+
+  it("disables the input and both buttons while busy", async () => {
+    fetchNextPatient.mockImplementationOnce(
+      async () => {
+        await new Promise((r) => setTimeout(r, 30));
+        return makeSession();
+      },
+    );
+
+    render(<SimulationClient />);
+    const input = screen.getByLabelText("Słowa kluczowe pacjenta") as HTMLInputElement;
+    const generateButton = screen.getByRole("button", { name: "Wygeneruj pacjenta" });
+    const nextButton = screen.getByRole("button", { name: "Następny pacjent" });
+
+    fireEvent.click(generateButton);
+    await act(async () => {});
+
+    expect(input.disabled).toBe(true);
+    expect(generateButton.disabled).toBe(true);
+    expect(nextButton.disabled).toBe(true);
+
+    // Let the slow action settle so cleanup() does not warn.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
   });
 });
