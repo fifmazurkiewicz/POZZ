@@ -63,3 +63,20 @@ blobs. Those are explicitly deferred.
 - **Split into "Manual" + "Recorded" tabs.** Deferred by user choice
   (see plan Decisions §2). Recorded one-shot capture stays a future
   Task 6 sub-task.
+
+## Follow-up: Phase 2 — dictation on the create-case form (2026-09-13)
+
+Doctor asked to also dictate the **case title** and **patient scenario
+description** before tapping "Rozpocznij wywiad". Decision:
+
+- Add a second mic button on the create-case form, one next to the title
+  and one next to the scenario textarea. Each appends the recognised
+  text to its own field (same UX as the running-interview mic).
+- Reuse `useInterviewVoiceInput` with a per-field callback (the hook is
+  field-agnostic). No new hook.
+- Polish error contract and `spend_cap` behavior inherited from Phase 1.
+- Out of scope: shared `MediaRecorder` (two instances may coexist; the
+  browser decides if both can capture at once — accepted for MVP).
+
+See `.cursor/plans/2026-09-13-interview-voice-input.md` Phase 2 section
+for the full Given/When/Then and risks.

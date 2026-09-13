@@ -135,3 +135,84 @@ manual `fetch(apiUrl("/api/voice/transcribe"), …)` mirroring
   which aborts any pending request. Safe.
 - Test environment lacks `MediaRecorder` → vitest stubs needed (same as
   `voiceController.test.ts`).
+
+---
+
+## Phase 2 — dictation on the create-case form (2026-09-13 follow-up)
+
+**Scope delta.** Doctor asked to also dictate the **case title** and
+**patient scenario description** on the form (before "Rozpocznij wywiad").
+This is additive — the mic on the running-interview composer (Phase 1)
+stays exactly as is.
+
+### Decisions
+
+- **2026-09-13 (follow-up)** — Two independent mic buttons on the
+  create-case form: one next to `Tytuł przypadku`, one next to
+  `Opis pacjenta i sytuacji`. Each appends the recognised text to its
+  own field (the doctor reviews/edits, like Phase 1).
+- **2026-09-13 (follow-up)** — Reuse the existing `useInterviewVoiceInput`
+  hook with a per-field `appendTranscript` callback
+  (`setTitle` / `setScenario`). No new hook needed — the hook is already
+  field-agnostic.
+- **2026-09-13 (follow-up)** — `Rozpocznij wywiad` activation condition
+  stays `scenario.trim().length >= 20`. Dictated text counts toward that
+  limit immediately after STT resolves (no extra guard).
+- **2026-09-13 (follow-up)** — Mic disabled when `busy` (form submit in
+  flight). Polish error from STT (e.g. `spend_cap_exceeded`) routes to the
+  existing inline banner (same path as Phase 1).
+- **2026-09-13 (follow-up)** — No recording two fields at once:
+  starting the title mic while scenario mic is `listening` is allowed
+  (each is its own hook); but if both fire close together, the page
+  shows both listening states (each hook has its own `MediaRecorder`).
+
+### Requirements (Given / When / Then)
+
+1. **Given** the create-case form is shown, **when** the doctor taps the
+   mic next to `Tytuł przypadku`, **then** recording starts and the button
+   label flips to "Wyślij nagranie".
+2. **Given** recording on the title field, **when** the doctor taps the
+   button again, **then** the recognised text is **appended** to the
+   title input (whitespace separator, trim).
+3. **Given** the create-case form, **when** the doctor taps the mic next
+   to `Opis pacjenta i sytuacji`, **then** recording starts independently
+   of the title mic (two `useInterviewVoiceInput` instances coexist).
+4. **Given** STT fails on the scenario mic, **when** the error resolves,
+   **then** the existing inline error banner shows the Polish message
+   and the textarea stays untouched.
+5. **Given** `busy` is true (form submit), **when** the doctor looks at
+   the form, **then** both mic buttons are disabled.
+6. **Given** dictated text brings `scenario.length` to ≥ 20, **when** the
+   doctor reviews the form, **then** `Rozpocznij wywiad` is enabled.
+
+### Plan (Phase 2)
+
+1. **Doc sync** — update ADR `2026-09-13-interview-voice-input.md` (add
+   Phase 2 section) + UX spec ("Wywiad" bullet mentions both mics).
+2. **Test delta** — extend `useInterviewVoiceInput.test.ts` with one
+   test that mounts two hooks in the same component and proves they
+   don't cross-contaminate (append goes to the right callback). Reuses
+   the existing fake MediaRecorder (each `useVoiceController` instance
+   gets its own).
+3. **Wire page** — in `frontend/src/app/interview/page.tsx`:
+   - instantiate `titleVoice = useInterviewVoiceInput({ token, appendTranscript: setTitle })`
+   - instantiate `scenarioVoice = useInterviewVoiceInput({ token, appendTranscript: (t) => setScenario((s) => (s ? `${s} ${t}` : t)) })`
+   - render two mic buttons (title + scenario), same SVG / classes as
+     Phase 1, with their own status lines.
+   - mirror errors via the page-level `banner = voice.error ?? error`
+     union (combine `titleVoice.error || scenarioVoice.error`).
+4. **Verify** — `npm run lint && npm test && npm run build`. Smoke in
+   the browser: fill title + scenario by voice, hit Rozpocznij wywiad.
+5. **Commit + push**.
+
+### Risks (Phase 2)
+
+- Two `useVoiceController` instances → two `MediaRecorder`s; the OS may
+  only allow one mic capture at a time. UX implication: the second tap
+  may silently fail. We accept this for MVP; a future follow-up could
+  share a single recorder and route to whichever field is active.
+- `setTitle` as append: dictating twice appends. Doctor can clear the
+  field between dictations if they want a clean replacement.
+- Larger `scenario` textarea grows past 12000 char `maxLength` → STT
+  appends after the cap will be silently dropped by the textarea
+  (browser native behavior). Acceptable.

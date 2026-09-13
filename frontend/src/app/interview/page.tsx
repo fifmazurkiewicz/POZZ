@@ -23,6 +23,18 @@ export default function InterviewPage() {
       setDraft((current) => (current ? `${current} ${text}` : text)),
   });
 
+  const titleVoice = useInterviewVoiceInput({
+    token: token ?? "",
+    appendTranscript: (text) =>
+      setTitle((current) => (current ? `${current} ${text}` : text)),
+  });
+
+  const scenarioVoice = useInterviewVoiceInput({
+    token: token ?? "",
+    appendTranscript: (text) =>
+      setScenario((current) => (current ? `${current} ${text}` : text)),
+  });
+
   // If the interview ends while the doctor was recording, abort the
   // recording + any pending transcription so the UI does not stay stuck.
   useEffect(() => {
@@ -96,8 +108,12 @@ export default function InterviewPage() {
   }
 
   const micDisabled = busy || !session || !!session.ended_at || voice.busy;
+  const titleMicDisabled = busy || titleVoice.busy;
+  const scenarioMicDisabled = busy || scenarioVoice.busy;
   const voiceStatus = voice.listening ? "Nagrywanie…" : voice.busy ? "Transkrypcja…" : "";
-  const banner = voice.error ?? error;
+  const titleVoiceStatus = titleVoice.listening ? "Nagrywanie…" : titleVoice.busy ? "Transkrypcja…" : "";
+  const scenarioVoiceStatus = scenarioVoice.listening ? "Nagrywanie…" : scenarioVoice.busy ? "Transkrypcja…" : "";
+  const banner = voice.error ?? titleVoice.error ?? scenarioVoice.error ?? error;
 
   return (
     <main className="app-page flex min-h-0 flex-1 flex-col">
@@ -109,27 +125,69 @@ export default function InterviewPage() {
           </p>
           <label className="block text-sm" htmlFor="case-title">
             Tytuł przypadku
-            <input
-              id="case-title"
-              className="mt-1 min-h-11 w-full rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-3"
-              value={title}
-              maxLength={120}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="np. Ból w klatce piersiowej"
-            />
+            <div className="mt-1 flex gap-2">
+              <input
+                id="case-title"
+                className="min-h-11 min-w-0 flex-1 rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-3"
+                value={title}
+                maxLength={120}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="np. Ból w klatce piersiowej"
+              />
+              <button
+                type="button"
+                className="classical-btn inline-flex shrink-0 items-center gap-2"
+                aria-pressed={titleVoice.listening}
+                aria-label="Mikrofon — tytuł przypadku"
+                disabled={titleMicDisabled}
+                onClick={titleVoice.toggle}
+              >
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <rect x="9" y="2" width="6" height="12" rx="3" />
+                  <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" />
+                </svg>
+                {titleVoice.listening ? "Wyślij nagranie" : "Mikrofon"}
+              </button>
+            </div>
+            {titleVoiceStatus ? (
+              <p className="mt-1 text-xs text-[var(--color-soft)]" role="status">
+                {titleVoiceStatus}
+              </p>
+            ) : null}
           </label>
           <label className="block text-sm" htmlFor="case-scenario">
             Opis pacjenta i sytuacji
-            <textarea
-              id="case-scenario"
-              className="mt-1 min-h-48 w-full rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-3"
-              value={scenario}
-              minLength={20}
-              maxLength={12000}
-              required
-              onChange={(event) => setScenario(event.target.value)}
-              placeholder="Opisz objawy, wiek oraz istotny kontekst medyczny…"
-            />
+            <div className="mt-1 flex gap-2">
+              <textarea
+                id="case-scenario"
+                className="min-h-48 min-w-0 flex-1 rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-3"
+                value={scenario}
+                minLength={20}
+                maxLength={12000}
+                required
+                onChange={(event) => setScenario(event.target.value)}
+                placeholder="Opisz objawy, wiek oraz istotny kontekst medyczny…"
+              />
+              <button
+                type="button"
+                className="classical-btn inline-flex shrink-0 items-center gap-2"
+                aria-pressed={scenarioVoice.listening}
+                aria-label="Mikrofon — opis pacjenta"
+                disabled={scenarioMicDisabled}
+                onClick={scenarioVoice.toggle}
+              >
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <rect x="9" y="2" width="6" height="12" rx="3" />
+                  <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" />
+                </svg>
+                {scenarioVoice.listening ? "Wyślij nagranie" : "Mikrofon"}
+              </button>
+            </div>
+            {scenarioVoiceStatus ? (
+              <p className="mt-1 text-xs text-[var(--color-soft)]" role="status">
+                {scenarioVoiceStatus}
+              </p>
+            ) : null}
           </label>
           <button className="classical-btn classical-btn-primary" disabled={busy || scenario.trim().length < 20} type="submit">
             Rozpocznij wywiad

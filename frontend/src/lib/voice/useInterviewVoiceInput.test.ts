@@ -8,61 +8,63 @@ vi.mock("../api", async (importOriginal) => {
 
 import { useInterviewVoiceInput } from "./useInterviewVoiceInput";
 
-type RecordingHandlers = {
-  ondataavailable: ((event: { data: Blob }) => void) | null;
-  onstop: (() => void) | null;
+type FakeRecorderInstance = {
+  state: "inactive" | "recording";
+  fireData: () => void;
+  fireStop: () => void;
 };
 
-let recorderState: "inactive" | "recording" = "inactive";
-let pendingStop: (() => void) | null = null;
-let pendingData: (() => void) | null = null;
-let lastRecorderHandlers: RecordingHandlers | null = null;
-let grantStream: ((stream: MediaStream) => void) | null = null;
+const recorders: FakeRecorderInstance[] = [];
+let getUserMediaCalls = 0;
+const getUserMediaResolvers: Array<(stream: MediaStream) => void> = [];
 let pendingFetch: ((response: Response) => void) | null = null;
 
 function makeRecorderClass() {
   return class FakeRecorder {
     static isTypeSupported = () => true;
-    ondataavailable: RecordingHandlers["ondataavailable"] = null;
-    onstop: RecordingHandlers["onstop"] = null;
+    ondataavailable: ((event: { data: Blob }) => void) | null = null;
+    onstop: (() => void) | null = null;
     state: "inactive" | "recording" = "inactive";
     mimeType = "audio/webm";
+    private instance: FakeRecorderInstance;
+
     constructor(stream: MediaStream) {
       void stream;
-      lastRecorderHandlers = {
-        ondataavailable: (event) => this.ondataavailable?.(event),
-        onstop: () => this.onstop?.(),
+      const instance: FakeRecorderInstance = {
+        state: "inactive",
+        fireData: () => {},
+        fireStop: () => {},
       };
-      this.ondataavailable = lastRecorderHandlers.ondataavailable;
-      this.onstop = lastRecorderHandlers.onstop;
-      this.state = recorderState;
+      instance.fireData = () => this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
+      instance.fireStop = () => this.onstop?.();
+      this.instance = instance;
+      recorders.push(instance);
     }
     start() {
-      recorderState = "recording";
       this.state = "recording";
-      pendingData = () => this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
+      this.instance.state = "recording";
     }
     stop() {
-      recorderState = "inactive";
       this.state = "inactive";
-      pendingStop = () => this.onstop?.();
+      this.instance.state = "inactive";
     }
   };
 }
 
 beforeEach(() => {
-  recorderState = "inactive";
-  pendingStop = null;
-  pendingData = null;
-  lastRecorderHandlers = null;
-  grantStream = null;
+  recorders.length = 0;
+  getUserMediaCalls = 0;
+  getUserMediaResolvers.length = 0;
   pendingFetch = null;
   vi.stubGlobal("MediaRecorder", makeRecorderClass());
   vi.stubGlobal("navigator", {
     mediaDevices: {
-      getUserMedia: () => new Promise<MediaStream>((resolve) => {
-        grantStream = resolve;
-      }),
+      getUserMedia: () => {
+        getUserMediaCalls += 1;
+        return new Promise<MediaStream>((resolve) => {
+          getUserMediaResolvers.push(resolve);
+        });
+      },
     },
   });
   vi.stubGlobal("window", { localStorage: { getItem: () => null }, speechSynthesis: { cancel: vi.fn(), speak: vi.fn() } });
@@ -77,6 +79,20 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+
+function lastRecorder(): FakeRecorderInstance {
+  const rec = recorders[recorders.length - 1];
+  if (!rec) throw new Error("No recorder instance created");
+  return rec;
+}
+
+async function grantLastMic(): Promise<void> {
+  await act(async () => {
+    const resolver = getUserMediaResolvers[getUserMediaResolvers.length - 1];
+    resolver!({ getTracks: () => [] } as unknown as MediaStream);
+    await Promise.resolve();
+  });
+}
 
 async function flushAsync() {
   await act(async () => {
@@ -99,12 +115,9 @@ describe("useInterviewVoiceInput", () => {
     const { result } = renderHook(() => useInterviewVoiceInput({ token: "tok", appendTranscript: vi.fn() }));
     act(() => { result.current.toggle(); });
     await flushAsync();
-    expect(grantStream).not.toBeNull();
+    expect(getUserMediaCalls).toBe(1);
     expect(result.current.listening).toBe(false); // still false until grant + start
-    await act(async () => {
-      grantStream!({ getTracks: () => [] } as unknown as MediaStream);
-      await Promise.resolve();
-    });
+    await grantLastMic();
     expect(result.current.listening).toBe(true);
   });
 
@@ -114,10 +127,7 @@ describe("useInterviewVoiceInput", () => {
 
     // First toggle: start recording
     act(() => { result.current.toggle(); });
-    await act(async () => {
-      grantStream!({ getTracks: () => [] } as unknown as MediaStream);
-      await Promise.resolve();
-    });
+    await grantLastMic();
     expect(result.current.listening).toBe(true);
 
     // Second toggle: finalize + transcribe
@@ -125,8 +135,9 @@ describe("useInterviewVoiceInput", () => {
     await flushAsync();
     // Simulate recorder emitting data + stopping
     await act(async () => {
-      pendingData?.();
-      pendingStop?.();
+      const rec = lastRecorder();
+      rec.fireData();
+      rec.fireStop();
       await Promise.resolve();
       pendingFetch?.({
         ok: true,
@@ -150,18 +161,16 @@ describe("useInterviewVoiceInput", () => {
     const { result } = renderHook(() => useInterviewVoiceInput({ token: "tok", appendTranscript: append }));
 
     act(() => { result.current.toggle(); });
-    await act(async () => {
-      grantStream!({ getTracks: () => [] } as unknown as MediaStream);
-      await Promise.resolve();
-    });
+    await grantLastMic();
 
     act(() => { result.current.toggle(); });
     await flushAsync();
     // Resolve the pending fetch with an error response (the beforeEach
     // fetch mock waits on `pendingFetch`).
     await act(async () => {
-      pendingData?.();
-      pendingStop?.();
+      const rec = lastRecorder();
+      rec.fireData();
+      rec.fireStop();
       // Wait for transcribeAudio to call fetch (microtask chain)
       await Promise.resolve();
       await Promise.resolve();
@@ -193,30 +202,26 @@ describe("useInterviewVoiceInput", () => {
 
     // First recording: start → finalize → fetch hangs (never resolved)
     act(() => { result.current.toggle(); });
-    await act(async () => {
-      grantStream!({ getTracks: () => [] } as unknown as MediaStream);
-      await Promise.resolve();
-    });
+    await grantLastMic();
     act(() => { result.current.toggle(); });
     await flushAsync();
     await act(async () => {
-      pendingData?.();
-      pendingStop?.();
+      const rec = lastRecorder();
+      rec.fireData();
+      rec.fireStop();
       await Promise.resolve();
       // fetch now hangs — pendingFetch never called
     });
 
     // Second recording: starting should cancel the previous in-flight run.
     act(() => { result.current.toggle(); });
-    await act(async () => {
-      grantStream!({ getTracks: () => [] } as unknown as MediaStream);
-      await Promise.resolve();
-    });
+    await grantLastMic();
     act(() => { result.current.toggle(); });
     await flushAsync();
     await act(async () => {
-      pendingData?.();
-      pendingStop?.();
+      const rec = lastRecorder();
+      rec.fireData();
+      rec.fireStop();
       await Promise.resolve();
       pendingFetch?.({
         ok: true,
@@ -232,5 +237,74 @@ describe("useInterviewVoiceInput", () => {
 
     expect(append).toHaveBeenLastCalledWith("Nowa wypowiedź");
     expect(append).not.toHaveBeenCalledWith("Ból w klatce od rana");
+  });
+
+  it("keeps two independent hook instances separate (no cross-contamination)", async () => {
+    const titleAppend = vi.fn();
+    const scenarioAppend = vi.fn();
+    const { result: title } = renderHook(() =>
+      useInterviewVoiceInput({ token: "tok", appendTranscript: titleAppend })
+    );
+    const { result: scenario } = renderHook(() =>
+      useInterviewVoiceInput({ token: "tok", appendTranscript: scenarioAppend })
+    );
+
+    // Start recording on the TITLE field.
+    act(() => { title.current.toggle(); });
+    await grantLastMic();
+    expect(title.current.listening).toBe(true);
+    expect(scenario.current.listening).toBe(false);
+
+    // Start recording on the SCENARIO field while title is still listening.
+    act(() => { scenario.current.toggle(); });
+    await grantLastMic();
+    expect(title.current.listening).toBe(true);
+    expect(scenario.current.listening).toBe(true);
+
+    // Finalize title; its STT should land on titleAppend only.
+    act(() => { title.current.toggle(); });
+    await flushAsync();
+    await act(async () => {
+      const titleRecorder = recorders[recorders.length - 2];
+      titleRecorder!.fireData();
+      titleRecorder!.fireStop();
+      await Promise.resolve();
+      pendingFetch?.({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () => JSON.stringify({ text: "Ból w klatce" }),
+        json: async () => ({ text: "Ból w klatce" }),
+      } as unknown as Response);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(titleAppend).toHaveBeenCalledWith("Ból w klatce");
+    expect(scenarioAppend).not.toHaveBeenCalled();
+
+    // Finalize scenario; its STT should land on scenarioAppend only.
+    act(() => { scenario.current.toggle(); });
+    await flushAsync();
+    await act(async () => {
+      const scenarioRecorder = recorders[recorders.length - 1];
+      scenarioRecorder!.fireData();
+      scenarioRecorder!.fireStop();
+      await Promise.resolve();
+      pendingFetch?.({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () => JSON.stringify({ text: "Pacjent lat 45, od rana" }),
+        json: async () => ({ text: "Pacjent lat 45, od rana" }),
+      } as unknown as Response);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(scenarioAppend).toHaveBeenCalledWith("Pacjent lat 45, od rana");
+    expect(titleAppend).not.toHaveBeenCalledWith("Pacjent lat 45, od rana");
   });
 });
