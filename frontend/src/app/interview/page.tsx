@@ -3,9 +3,9 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { ApiError, apiFetch } from "@/lib/api";
+import { RecordedRecorder } from "@/components/interview/RecordedRecorder";
 import { fetchConversation, generateCasePlan, postTurn, speakerLabel, type SimMessage, type SimulationSession } from "@/lib/simulation/api";
 import { useInterviewVoiceInput } from "@/lib/voice/useInterviewVoiceInput";
-import { uploadRecordedInterview } from "@/lib/interview/api";
 
 type InterviewMode = "recorded" | "manual";
 
@@ -20,7 +20,6 @@ export default function InterviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [planBusy, setPlanBusy] = useState(false);
   const [mode, setMode] = useState<InterviewMode>("recorded");
-  const [audioFile, setAudioFile] = useState<File | null>(null);
   const restoredConversation = useRef<string | null>(null);
 
   const voice = useInterviewVoiceInput({
@@ -94,24 +93,6 @@ export default function InterviewPage() {
     }
   }
 
-  async function uploadRecording(event: FormEvent) {
-    event.preventDefault();
-    if (!audioFile) return;
-    const access = await accessToken();
-    if (!access) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const created = await uploadRecordedInterview(access, audioFile, title);
-      setSession(created);
-      setMessages([]);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Nie udało się przetworzyć nagrania.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function send(event: FormEvent) {
     event.preventDefault();
     if (!session || !draft.trim()) return;
@@ -165,22 +146,28 @@ export default function InterviewPage() {
       <h1 className="text-3xl">Wywiad</h1>
       {!session ? (
         <>
-          <div className="mt-5 inline-flex rounded border border-[var(--color-divider)] p-1" role="group" aria-label="Sposób dodania wywiadu">
-            <button className={`classical-btn min-h-11 ${mode === "recorded" ? "classical-btn-primary" : ""}`} type="button" aria-pressed={mode === "recorded"} onClick={() => setMode("recorded")}>Nagranie</button>
-            <button className={`classical-btn min-h-11 ${mode === "manual" ? "classical-btn-primary" : ""}`} type="button" aria-pressed={mode === "manual"} onClick={() => setMode("manual")}>Ręcznie</button>
+          <div className="mt-5 inline-flex gap-1 rounded border border-[var(--color-divider)] p-0.5" role="group" aria-label="Sposób dodania wywiadu">
+            <button className={`classical-btn text-sm ${mode === "recorded" ? "classical-btn-primary" : ""}`} type="button" aria-pressed={mode === "recorded"} onClick={() => setMode("recorded")}>Nagranie</button>
+            <button className={`classical-btn text-sm ${mode === "manual" ? "classical-btn-primary" : ""}`} type="button" aria-pressed={mode === "manual"} onClick={() => setMode("manual")}>Ręcznie</button>
           </div>
           {mode === "recorded" ? (
-            <form className="classical-card mt-4 max-w-2xl space-y-4 p-4" onSubmit={(event) => void uploadRecording(event)}>
+            <div className="classical-card mt-4 max-w-2xl space-y-3 p-4">
               <div>
                 <h2 className="text-xl">Transkrypcja nagrania</h2>
-                <p className="mt-1 text-sm text-[var(--color-soft)]">Dodaj pełne nagranie rozmowy lekarza z pacjentem. Plik jest przetwarzany w pamięci i nie jest zapisywany.</p>
+                <p className="mt-1 text-sm text-[var(--color-soft)]">Nagraj rozmowę lekarza z pacjentem. Nagranie jest przetwarzane w pamięci i nie jest zapisywane.</p>
               </div>
               <label className="block text-sm" htmlFor="recording-title">Tytuł (opcjonalny)</label>
               <input id="recording-title" className="min-h-11 w-full rounded border border-[var(--color-divider)] bg-[var(--color-bg)] px-3" value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} placeholder="np. Wizyta kontrolna" />
-              <label className="block text-sm" htmlFor="interview-audio">Plik audio, maks. 25 MB</label>
-              <input id="interview-audio" className="block min-h-11 w-full rounded border border-[var(--color-divider)] bg-[var(--color-bg)] p-2 text-sm" type="file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg" required onChange={(event) => setAudioFile(event.target.files?.[0] ?? null)} />
-              <button className="classical-btn classical-btn-primary" type="submit" disabled={busy || !audioFile}>{busy ? "Transkrypcja i rozpoznawanie rozmówców…" : "Transkrybuj nagranie"}</button>
-            </form>
+              <RecordedRecorder
+                token={token ?? ""}
+                title={title}
+                onCreated={(created) => {
+                  setSession(created);
+                  setMessages([]);
+                }}
+                onError={(message) => setError(message)}
+              />
+            </div>
           ) : (
         <form className="classical-card mt-4 max-w-2xl space-y-4 p-4" onSubmit={(event) => void start(event)}>
           <p className="text-sm text-[var(--color-soft)]">
@@ -270,7 +257,6 @@ export default function InterviewPage() {
                 setMessages([]);
                 setScenario("");
                 setTitle("");
-                setAudioFile(null);
               }}
             >
               Nowy przypadek

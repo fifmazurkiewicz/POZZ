@@ -28,4 +28,20 @@ describe("uploadRecordedInterview", () => {
     expect(form.get("audio")).toBeInstanceOf(File);
     expect(form.get("title")).toBe("Wizyta kontrolna");
   });
+
+  it("accepts a raw Blob (e.g. MediaRecorder output) as the audio field", async () => {
+    const fetchMock = vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ conversation_id: "recorded-2" }),
+    } as Response);
+    const audio = new Blob(["recorder-output"], { type: "audio/webm" });
+
+    const result = await uploadRecordedInterview("token", audio);
+
+    expect(result.conversation_id).toBe("recorded-2");
+    const form = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(form.get("audio")).toBeInstanceOf(Blob);
+    expect((form.get("audio") as Blob).size).toBe(audio.size);
+    expect(form.get("title")).toBeNull();
+  });
 });

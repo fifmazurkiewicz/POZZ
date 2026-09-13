@@ -52,8 +52,8 @@ Zimny API: globalny banner **Waking up…** (ApiPulse), zanim czat/mikrofon są 
 
 ## 6. Wywiad (nagrany + ręczny)
 
-- Sub-tryby: **Nagraj** | **Ręcznie**.
-- Nagraj: Start (tworzy sesję) → nagrywanie → Stop (upload + spinner transkrypcja/analiza) → transkrypt z rolami + podsumowanie + ekstrakcja (leki / zalecenia / badania).
+- Sub-tryby: **Nagraj** | **Ręcznie** (kompaktowy toggle, `text-sm`).
+- Nagraj: opcjonalny tytuł + przycisk **Rozpocznij nagrywanie** → live capture (`useVoiceController`) z pulsującą kropką i timerem → **Zatrzymaj i transkrybuj** (albo **Anuluj**) → POST `/api/interviews/recordings` z blobem w pamięci → transkrypt z rolami + podsumowanie + ekstrakcja (leki / zalecenia / badania). Nic nie jest zapisywane po stronie klienta. Implementacja: [`frontend/src/components/interview/RecordedRecorder.tsx`](../../frontend/src/components/interview/RecordedRecorder.tsx).
 - Ręcznie: textarea scenariusza opcjonalna; rozmowa tekstowa; te same akcje **Zatrzymaj**, **Zrób badanie** i **Zakończ wywiad** co w Symulacji. Wyniki badań trafiają do historii, a ukończona rozmowa jest tylko do odczytu.
 
 ## 7. Sesje

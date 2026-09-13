@@ -80,3 +80,63 @@ description** before tapping "Rozpocznij wywiad". Decision:
 
 See `.cursor/plans/2026-09-13-interview-voice-input.md` Phase 2 section
 for the full Given/When/Then and risks.
+
+## Follow-up: Phase 3 — live recording on Nagranie tab (2026-09-13)
+
+Doctor asked for the Wywiad "Nagranie" surface to record the encounter
+in the browser rather than upload a pre-recorded file:
+
+> "Po 1 chciałbym mieć mniejsze te przyciski. Tryb recorded ma
+> wyglądać że apka nagrywa wywiad który na żywo i transkrybuje a
+> następnie robimy analizę itp. Czyli nie chce wrzucać gotowego
+> nagrania ale ma to być nagrywane."
+
+Decision:
+
+- Replace the file-upload form on the "Nagranie" tab with a live
+  recorder (`RecordedRecorder` component). Mic lifecycle is owned by
+  the same `useVoiceController` used elsewhere; on stop, the resulting
+  `Blob` is POSTed to the existing `POST /api/interviews/recordings`
+  endpoint (no backend change — the endpoint already accepts a
+  multipart audio blob and runs STT + speaker diarization).
+- Title field stays (optional, `maxLength=120`).
+- No "Opis sytuacji" on the Nagranie tab — that field lives on the
+  Ręcznie tab; the recording itself is the description on this
+  surface.
+- Mode toggle shrinks (`text-sm` + `px-3`, `p-0.5` group) to match
+  the rest of the page; touch-target size 44 px is not required on
+  this desktop clinical surface.
+- New component `frontend/src/components/interview/RecordedRecorder.tsx`
+  encapsulates the recorder state machine (idle → recording →
+  submitting). `useInterviewVoiceInput` is unchanged — it's still
+  the right hook for short dictation + `/api/voice/transcribe`.
+- Animated recording dot uses `motion-safe:animate-pulse` and
+  degrades to a static dot under `prefers-reduced-motion`.
+
+Why:
+
+- Explicit user request.
+- Reuses every existing building block (`useVoiceController`,
+  `/api/interviews/recordings`, `uploadRecordedInterview`). No new
+  backend code, no new env vars, no new dependencies.
+
+Consequences:
+
+- The legacy upload form is gone. Files already uploaded via the
+  previous flow remain visible in sessions (`kind="recorded_interview"`
+  rows continue to load and render their existing transcript).
+- The doctor still sees a "Tytuł (opcjonalny)" field — backend uses
+  it if present, falls back to a timestamped filename otherwise
+  (auto-generated client-side as `nagranie-YYYYMMDD-HHMMSS.webm`).
+- No audio is persisted client-side (matches MVP "no durable audio
+  blobs" rule).
+
+Out of scope (still deferred):
+
+- Pause / resume during a recording.
+- Live waveform visualisation.
+- Streaming / chunked upload.
+- Storing audio blobs.
+
+See `.cursor/plans/2026-09-13-interview-recorded-live-capture.md`
+for the implementation plan and test contract.
