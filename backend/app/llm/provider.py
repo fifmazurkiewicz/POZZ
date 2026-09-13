@@ -108,7 +108,36 @@ class OpenRouterProvider:
                 request=response.request,
                 response=response,
             )
-        return response.json()["choices"][0]["message"]["content"]
+        return _openrouter_completion_text(response)
+
+
+def _openrouter_completion_text(response: httpx.Response) -> str:
+    """Normalize OpenRouter content and classify malformed 200s as provider failures."""
+    try:
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        raise httpx.RemoteProtocolError(
+            "OpenRouter returned a malformed completion response",
+            request=response.request,
+        ) from exc
+
+    if isinstance(content, str):
+        text = content.strip()
+    elif isinstance(content, list):
+        text = "".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") in {None, "text"}
+        ).strip()
+    else:
+        text = ""
+    if not text:
+        raise httpx.RemoteProtocolError(
+            "OpenRouter returned an empty completion",
+            request=response.request,
+        )
+    return text
 
 
 class GoogleGeminiProvider:

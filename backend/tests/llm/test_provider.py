@@ -54,6 +54,48 @@ def test_openrouter_does_not_retry_credit_error(monkeypatch):
     assert calls == 1
 
 
+def test_openrouter_accepts_structured_text_content(monkeypatch):
+    monkeypatch.setattr(
+        "app.llm.provider.httpx.post",
+        lambda *args, **kwargs: _response(
+            200,
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": [
+                                {"type": "text", "text": "Plan "},
+                                {"type": "text", "text": "gotowy"},
+                            ]
+                        }
+                    }
+                ]
+            },
+        ),
+    )
+
+    result = OpenRouterProvider("secret", "model").complete(
+        [{"role": "user", "content": "Test"}]
+    )
+
+    assert result == "Plan gotowy"
+
+
+def test_malformed_openrouter_success_activates_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "app.llm.provider.httpx.post",
+        lambda *args, **kwargs: _response(200, {"choices": []}),
+    )
+
+    class Fallback:
+        def complete(self, messages):
+            return "Plan awaryjny"
+
+    provider = FallbackTextProvider(OpenRouterProvider("secret", "model"), Fallback())
+
+    assert provider.complete([]) == "Plan awaryjny"
+
+
 def test_google_gemini_converts_chat_messages(monkeypatch):
     captured = {}
 
