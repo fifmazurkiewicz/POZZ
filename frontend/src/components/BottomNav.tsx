@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ApiHealthDot } from "@/components/ApiHealthDot";
 
 const TABS = [
   { href: "/simulation", label: "Symulacja" },
@@ -14,7 +15,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="flex shrink-0 border-t border-[var(--color-divider)] bg-[var(--color-surface)] pb-[env(safe-area-inset-bottom)]"
+      className="relative flex shrink-0 border-t border-[var(--color-divider)] bg-[var(--color-surface)] pb-[env(safe-area-inset-bottom)]"
       aria-label="Główne"
     >
       {TABS.map((tab) => {
@@ -32,6 +33,7 @@ export function BottomNav() {
           </Link>
         );
       })}
+      <ApiHealthDot />
     </nav>
   );
 }
