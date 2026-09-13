@@ -6,7 +6,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.llm.provider import MOCK_FIRST_TIME_PLAN, MOCK_TREATMENT_PLAN, get_text_provider
+from app.llm.provider import (
+    MOCK_FIRST_TIME_PLAN,
+    MOCK_TREATMENT_PLAN,
+    get_text_provider,
+)
 from app.models import Conversation, Patient, PatientUserState, User
 from app.patients.card import parse_patient_card_from_scenario, public_card
 from app.prompts.simulation import generate_patient_scenario_prompt
@@ -49,7 +53,9 @@ def generate_patient(
     first_time: bool = False,
 ) -> Patient:
     provider = get_text_provider()
-    messages = generate_patient_scenario_prompt(keywords=keywords, first_time_missing_basics=first_time)
+    messages = generate_patient_scenario_prompt(
+        keywords=keywords, first_time_missing_basics=first_time
+    )
     scenario = provider.complete(messages)
     card = parse_patient_card_from_scenario(scenario)
     is_first = first_time or (card.get("has_history_here") is False if card else False)
@@ -71,7 +77,9 @@ def generate_patient(
     return patient
 
 
-def pick_or_generate_patient(db: Session, user: User, keywords: str | None = None) -> Patient:
+def pick_or_generate_patient(
+    db: Session, user: User, keywords: str | None = None
+) -> Patient:
     if keywords and keywords.strip():
         return generate_patient(db, user, keywords=keywords.strip())
 
@@ -136,14 +144,18 @@ def conversation_payload(conv: Conversation, patient: Patient) -> dict:
     return payload
 
 
-def get_owned_conversation(db: Session, user: User, conversation_id: uuid.UUID) -> Conversation:
+def get_owned_conversation(
+    db: Session, user: User, conversation_id: uuid.UUID
+) -> Conversation:
     conv = db.scalars(
         select(Conversation)
         .options(joinedload(Conversation.patient), selectinload(Conversation.messages))
         .where(Conversation.id == conversation_id)
     ).first()
     if conv is None or conv.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
     return conv
 
 
@@ -152,10 +164,17 @@ def get_owned_conversation_for_update(
 ) -> Conversation:
     conv = db.scalars(
         select(Conversation)
-        .options(joinedload(Conversation.patient), selectinload(Conversation.messages))
+        # PostgreSQL rejects FOR UPDATE when joinedload emits a LEFT OUTER JOIN
+        # to patients. Load both relationships in separate SELECTs so only the
+        # conversation row is locked.
+        .options(
+            selectinload(Conversation.patient), selectinload(Conversation.messages)
+        )
         .where(Conversation.id == conversation_id)
         .with_for_update()
     ).first()
     if conv is None or conv.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
     return conv
