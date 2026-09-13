@@ -16,6 +16,24 @@ settings = get_settings()
 PROVIDER_ERROR_MESSAGE = "Nie udało się wykonać operacji. Spróbuj ponownie."
 
 
+def _provider_error_detail(exc: httpx.HTTPError) -> tuple[str, str]:
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return "provider_error", PROVIDER_ERROR_MESSAGE
+    upstream_status = exc.response.status_code
+    if upstream_status in {401, 403}:
+        return "provider_auth_error", "Usługa AI nie jest poprawnie skonfigurowana."
+    if upstream_status == 402:
+        return "provider_credit_exhausted", "Brak środków na koncie usługi AI."
+    if upstream_status == 404:
+        return "provider_model_unavailable", "Skonfigurowany model AI jest niedostępny."
+    if upstream_status == 429:
+        return (
+            "provider_rate_limited",
+            "Usługa AI jest przeciążona. Spróbuj ponownie za chwilę.",
+        )
+    return "provider_error", PROVIDER_ERROR_MESSAGE
+
+
 class UnhandledExceptionMiddleware(BaseHTTPMiddleware):
     """Translate uncaught failures before the response passes through CORS."""
 
@@ -43,17 +61,17 @@ def _error_response(request: Request, exc: Exception) -> JSONResponse:
     """
     if isinstance(exc, httpx.HTTPError):
         status_code = status.HTTP_502_BAD_GATEWAY
+        error_code, error_message = _provider_error_detail(exc)
         logger.warning(
             "Provider failure on %s %s: %s", request.method, request.url.path, exc
         )
     else:
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        error_code, error_message = "provider_error", PROVIDER_ERROR_MESSAGE
         logger.exception("Unhandled error on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=status_code,
-        content={
-            "detail": {"code": "provider_error", "message": PROVIDER_ERROR_MESSAGE}
-        },
+        content={"detail": {"code": error_code, "message": error_message}},
     )
 
 

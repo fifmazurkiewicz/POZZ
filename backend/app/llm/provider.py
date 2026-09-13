@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Protocol
 
 import httpx
@@ -73,17 +74,33 @@ class OpenRouterProvider:
         self.model = model
 
     def complete(self, messages: list[dict[str, str]]) -> str:
-        response = httpx.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://pozz.fmazurkiewicz.dev",
-                "X-Title": "POZZ",
-            },
-            json={"model": self.model, "messages": messages},
-            timeout=60.0,
-        )
+        response: httpx.Response | None = None
+        for attempt in range(3):
+            try:
+                response = httpx.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://pozz.fmazurkiewicz.dev",
+                        "X-Title": "POZZ",
+                    },
+                    json={"model": self.model, "messages": messages},
+                    timeout=60.0,
+                )
+            except (httpx.ConnectError, httpx.TimeoutException):
+                if attempt == 2:
+                    raise
+                time.sleep(0.25 * (attempt + 1))
+                continue
+
+            if response.status_code != 429 and response.status_code < 500:
+                break
+            if attempt < 2:
+                time.sleep(0.25 * (attempt + 1))
+
+        if response is None:
+            raise httpx.RequestError("OpenRouter request did not return a response")
         if response.is_error:
             detail = response.text[:500]
             raise httpx.HTTPStatusError(
