@@ -1,5 +1,7 @@
 # POZZ — agent notes
 
+> Cross-agent baseline: follow [`AGENT_STANDARD.md`](AGENT_STANDARD.md) for Codex, Cursor, and Claude Code.
+
 ## Stack (must match deployment standard)
 
 | Layer | Platform |

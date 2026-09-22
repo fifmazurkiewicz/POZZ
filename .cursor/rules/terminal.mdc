@@ -1,3 +1,0 @@
-# Terminal
-
-The agent **may and should** use the terminal (Shell): git, tests, installs, logs, CLI, diagnostics. Don't ask permission for routine commands.
