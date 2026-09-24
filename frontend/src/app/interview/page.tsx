@@ -143,7 +143,7 @@ export default function InterviewPage() {
   const banner = voice.error ?? titleVoice.error ?? scenarioVoice.error ?? error;
 
   return (
-    <main className="app-page flex min-h-0 flex-1 flex-col">
+    <main className="app-page flex min-h-0 flex-1 flex-col overflow-y-auto pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
       <h1 className="text-3xl">Wywiad</h1>
       {!session ? (
         <>

@@ -85,6 +85,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=86_400,
 )
 app.include_router(api_router, prefix="/api")
 
