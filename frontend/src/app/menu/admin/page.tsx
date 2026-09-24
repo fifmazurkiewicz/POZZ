@@ -13,17 +13,20 @@ export default function AdminPage() {
   const router = useRouter();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canOpenAdmin(isAdmin)) { router.replace("/menu"); return; }
     void (async () => {
       const access = token ?? (await getAccessToken());
-      if (!access) return;
+      if (!access) { setLoading(false); return; }
       try { setUsers(await fetchAdminUsers(access)); }
       catch (err) { setError(err instanceof ApiError ? err.message : "Nie udało się pobrać kont."); }
+      finally { setLoading(false); }
     })();
-  }, [getAccessToken, isAdmin, router, token]);
+  }, [getAccessToken, isAdmin, refreshKey, router, token]);
 
   async function setApproval(row: AdminUser, approved: boolean) {
     const access = token ?? (await getAccessToken());
@@ -53,7 +56,7 @@ export default function AdminPage() {
   return <main className="app-page flex-1">
     <MenuBackLink />
     <h1 className="text-3xl">Administracja</h1>
-    {error ? <p className="mt-4 text-sm text-amber-700" role="alert">{error}</p> : null}
+    {loading ? <p className="mt-4 text-sm" role="status">Wczytywanie kont…</p> : error ? <div className="mt-4 space-y-2" role="alert"><p className="text-sm text-amber-700">{error}</p><button className="classical-btn" type="button" onClick={() => setRefreshKey((value) => value + 1)}>Spróbuj ponownie</button></div> : null}
     <p className="mt-3 text-sm text-[var(--color-soft)]">Ustaw miesięczny limit wydatków dla każdego konta. Wartość 0 oznacza brak limitu.</p>
     <UserSection title="Oczekujące konta" empty="Brak kont oczekujących na akceptację." rows={pending} selfId={userId} busyId={busyId} onSetApproval={setApproval} onSetSpendCap={setSpendCap} />
     <UserSection title="Zaakceptowane konta" empty="Brak zaakceptowanych kont." rows={approved} selfId={userId} busyId={busyId} onSetApproval={setApproval} onSetSpendCap={setSpendCap} />
