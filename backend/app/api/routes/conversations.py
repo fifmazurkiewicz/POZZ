@@ -317,6 +317,12 @@ def finish_conversation(
             state.status = "completed"
             state.updated_at = datetime.now(UTC)
     db.commit()
-    return conversation_payload(
+    payload = conversation_payload(
         get_owned_conversation(db, user, conversation_id), conv.patient
     )
+    from app.llm.jev import training_signals
+
+    signals = training_signals(evaluation)
+    if signals is not None:
+        payload["decision_signals"] = signals
+    return payload
