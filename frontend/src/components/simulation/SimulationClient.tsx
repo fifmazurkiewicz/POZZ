@@ -133,7 +133,8 @@ export function SimulationClient() {
   }
 
   const active = busy || voice.speaking || voice.listening;
-  return <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+  const completed = Boolean(session?.ended_at);
+  return <main className={`flex min-h-0 flex-1 flex-col ${completed ? "overflow-y-auto" : "overflow-hidden"}`}>
     <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-divider)] px-3 py-1">
       <div><h1 className="text-lg">Symulacja</h1><p className="text-xs text-[var(--color-soft)]">Pacjent i ocena są generowane przez AI</p></div>
       <div className="flex shrink-0 items-center gap-2">
@@ -144,7 +145,7 @@ export function SimulationClient() {
     {session && !session.ended_at ? <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--color-divider)] px-3 py-1">
       {MODES.map((item) => <button key={item.id} type="button" disabled={busy} className={`classical-btn shrink-0 px-3 text-sm ${mode === item.id ? "classical-btn-primary" : ""}`} aria-pressed={mode === item.id} onClick={() => { stop(); setMode(item.id); }}>{item.label}</button>)}
     </div> : null}
-    <section ref={transcriptRef} onScroll={onTranscriptScroll} className="simulation-transcript min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 text-sm" aria-label="Rozmowa" tabIndex={0}>
+    <section ref={transcriptRef} onScroll={onTranscriptScroll} className={`simulation-transcript px-4 py-4 text-sm ${completed ? "shrink-0" : "min-h-0 flex-1 overflow-y-auto overscroll-contain"}`} aria-label="Rozmowa" tabIndex={0}>
       {!session ? <p className="text-[var(--color-soft)]">Najpierw wygeneruj pacjenta, aby móc rozpocząć wywiad.</p> : <>
         <button type="button" className="mb-3 min-h-11 w-full text-left font-semibold" onClick={() => setCardOpen((open) => !open)} aria-expanded={cardOpen}>Karta pacjenta {cardOpen ? "▾" : "▸"}</button>
         {cardOpen ? <dl className="classical-card mb-4 space-y-1 p-3">{cardRowsForDisplay(session.card).map((row) => <div key={row.label} className="flex justify-between gap-3"><dt className="text-[var(--color-soft)]">{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : null}

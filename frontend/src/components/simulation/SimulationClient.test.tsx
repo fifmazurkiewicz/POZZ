@@ -55,7 +55,7 @@ import { SimulationClient } from "./SimulationClient";
 import { fetchNextPatient, postTurn } from "@/lib/simulation/api";
 import { transcribeAudio } from "@/lib/voice/transcribeAudio";
 
-function makeSession() {
+function makeSession(endedAt: string | null = null) {
   return {
     conversation_id: "conv-1",
     patient_id: "patient-1",
@@ -64,7 +64,7 @@ function makeSession() {
     title: "Nowy pacjent",
     card: { first_time: false, lines: [] },
     messages: [],
-    ended_at: null,
+    ended_at: endedAt,
   };
 }
 
@@ -174,5 +174,15 @@ describe("SimulationClient — Wygeneruj pacjenta", () => {
 
     expect((screen.getByRole("textbox", { name: "Wiadomość" }) as HTMLInputElement).value).toBe("Czy ból promieniuje?");
     expect(postTurn).not.toHaveBeenCalled();
+  });
+
+  it("scrolls the complete screen after the interview is finished", async () => {
+    vi.mocked(fetchNextPatient).mockResolvedValueOnce(makeSession("2026-09-26T12:00:00Z") as never);
+    render(<SimulationClient />);
+
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Następny pacjent" })); });
+
+    expect(screen.getByRole("main").className).toContain("overflow-y-auto");
+    expect(screen.getByLabelText("Rozmowa").className).not.toContain("overflow-y-auto");
   });
 });
