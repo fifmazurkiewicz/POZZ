@@ -17,7 +17,5 @@ export function useVoiceController() {
   const play = useCallback((text: string, token: string) => controller.current?.play(text, token), []);
   const startRecording = useCallback((onBlob: (blob: Blob) => void) => { setError(null); return controller.current?.startRecording(onBlob); }, []);
   const finishRecording = useCallback(() => controller.current?.finishRecording(), []);
-  const startConversationTurn = useCallback((token: string, onComplete: (text: string) => void) => { setError(null); return controller.current?.startConversationTurn(token, onComplete); }, []);
-  const stopConversationTurn = useCallback(() => { controller.current?.stopConversationTurn(); setError(null); }, []);
-  return { speaking, listening, error, stop, play, startRecording, finishRecording, startConversationTurn, stopConversationTurn };
+  return { speaking, listening, error, stop, play, startRecording, finishRecording };
 }

@@ -3,11 +3,11 @@
 import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { apiUrl } from "@/lib/api";
 import { composerPlaceholder, fetchNextPatient, fetchConversation, postTurn, speakerLabel, type SimMode, type SimulationSession } from "@/lib/simulation/api";
 import { cardRowsForDisplay } from "@/lib/simulation/cardDisplay";
 import { useAbortableAction } from "@/lib/useAbortableAction";
 import { useVoiceController } from "@/lib/voice/useVoiceController";
+import { transcribeAudio } from "@/lib/voice/transcribeAudio";
 import { ConversationComposer } from "./ConversationComposer";
 import { InterviewActions, InterviewEvaluation } from "./InterviewActions";
 
@@ -36,13 +36,12 @@ export function SimulationClient() {
   const keywordsTitleId = useId();
   const keywordsHintId = useId();
   const [patientVoice, setPatientVoice] = useState(true);
-  const [inputMode, setInputMode] = useState<"messages" | "conversation">("messages");
   const patientVoiceRef = useRef(true);
   const { busy, error, cancelled, run, cancel } = useAbortableAction();
   const voice = useVoiceController();
   const stopVoice = voice.stop;
   const bearer = useCallback(async () => token ?? await getAccessToken(), [token, getAccessToken]);
-  const stop = useCallback(() => { cancel(); stopVoice(); setInputMode("messages"); }, [cancel, stopVoice]);
+  const stop = useCallback(() => { cancel(); stopVoice(); }, [cancel, stopVoice]);
 
   useEffect(() => {
     if (keywordsOpen) keywordsDialog.current?.showModal();
@@ -106,25 +105,30 @@ export function SimulationClient() {
     }, (next) => { setSession(next); setMode(next.mode); setDraft(""); setCardOpen(true); setKeywords(""); setKeywordsOpen(false); });
   }
 
-  function submitTurn(text: string, audio?: Blob) {
-    if (!session || session.ended_at || (!text && !audio)) return;
+  function submitTurn(text: string) {
+    if (!session || session.ended_at || !text) return;
     stop();
     void run(async (signal) => {
       const access = await bearer();
       signal.throwIfAborted();
       if (!access) throw new Error("Missing token");
-      if (audio) {
-        const form = new FormData(); form.append("audio", audio, "doctor-turn.webm");
-        const response = await fetch(apiUrl("/api/voice/transcribe"), { method: "POST", signal, headers: { Authorization: `Bearer ${access}` }, body: form });
-        if (!response.ok) throw new Error("Transcription failed");
-        text = (await response.json() as { text: string }).text;
-      }
-      signal.throwIfAborted();
       const result = await postTurn(access, session.conversation_id, text, mode, signal);
       return { result, access };
     }, ({ result, access }) => {
       setSession(result); setDraft("");
       if (patientVoiceRef.current && result.assistant?.content) void voice.play(result.assistant.content, access);
+    });
+  }
+
+  function transcribeRecording(audio: Blob) {
+    void run(async (signal) => {
+      const access = await bearer();
+      signal.throwIfAborted();
+      if (!access) throw new Error("Missing token");
+      return transcribeAudio(access, audio, signal);
+    }, ({ text }) => {
+      const transcript = text.trim();
+      if (transcript) setDraft((current) => [current.trim(), transcript].filter(Boolean).join(" "));
     });
   }
 
@@ -184,6 +188,6 @@ export function SimulationClient() {
         </div>
       </form>
     </dialog>
-    <ConversationComposer draft={draft} onDraftChange={setDraft} onSend={(event) => { event.preventDefault(); submitTurn(draft.trim()); }} disabled={busy || !session || !!session.ended_at} placeholder={session?.ended_at ? "Wywiad zakończony" : composerPlaceholder(mode)} patientVoice={patientVoice} speaking={voice.speaking} listening={voice.listening} onVoiceChange={(enabled) => { patientVoiceRef.current = enabled; setPatientVoice(enabled); if (!enabled) stopVoice(); }} onListeningChange={(enabled) => { if (enabled) void voice.startRecording((blob) => submitTurn("", blob)); else voice.finishRecording(); }} inputMode={inputMode} onInputModeChange={(next) => { if (next === "messages") voice.stopConversationTurn(); setInputMode(next); }} onConversationStart={() => void bearer().then((access) => { if (access) void voice.startConversationTurn(access, submitTurn); })} onConversationStop={() => voice.stopConversationTurn()} />
+    <ConversationComposer draft={draft} onDraftChange={setDraft} onSend={(event) => { event.preventDefault(); submitTurn(draft.trim()); }} disabled={busy || !session || !!session.ended_at} placeholder={session?.ended_at ? "Wywiad zakończony" : composerPlaceholder(mode)} patientVoice={patientVoice} speaking={voice.speaking} listening={voice.listening} onVoiceChange={(enabled) => { patientVoiceRef.current = enabled; setPatientVoice(enabled); if (!enabled) stopVoice(); }} onListeningChange={(enabled) => { if (enabled) void voice.startRecording(transcribeRecording); else voice.finishRecording(); }} />
   </main>;
 }

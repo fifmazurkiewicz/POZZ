@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import get_approved_user
 from app.db import get_db
-from app.llm.jev import VoiceTurnDecisionError, voice_turn_decision
 from app.models import User
 from app.patients.service import assert_under_cap
 from app.settings import get_settings
@@ -41,30 +40,6 @@ async def transcribe_audio(
     async with httpx.AsyncClient(timeout=60.0) as client:
         text = await transcribe_upload(audio, settings, client=client)
     return {"text": text}
-
-
-@router.post("/turn-check")
-async def check_voice_turn(
-    audio: Annotated[UploadFile, File(...)],
-    user: Annotated[User, Depends(get_approved_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> dict[str, str]:
-    """Check a transient spoken fragment; neither audio nor text is stored."""
-    assert_under_cap(db, user)
-    settings = get_settings()
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        text = await transcribe_upload(audio, settings, client=client)
-    try:
-        decision = voice_turn_decision(text)
-    except VoiceTurnDecisionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "code": "voice_turn_check_failed",
-                "message": "Nie udało się rozpoznać końca wypowiedzi. Powiedz ją ponownie.",
-            },
-        ) from exc
-    return {"decision": decision, "text": text}
 
 
 @router.post("/speech")

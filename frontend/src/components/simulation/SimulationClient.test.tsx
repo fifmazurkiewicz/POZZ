@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
+const { startRecording } = vi.hoisted(() => ({ startRecording: vi.fn() }));
+
 // jsdom does not implement <dialog> showModal/close — polyfill so mounted
 // InterviewActions (which uses <dialog> for examination/finish modals) does not throw.
 if (typeof HTMLDialogElement !== "undefined") {
@@ -27,7 +29,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/voice/useVoiceController", () => ({
   useVoiceController: () => ({
-    startRecording: vi.fn(),
+    startRecording,
     finishRecording: vi.fn(),
     play: vi.fn(),
     stop: vi.fn(),
@@ -36,6 +38,8 @@ vi.mock("@/lib/voice/useVoiceController", () => ({
     error: null,
   }),
 }));
+
+vi.mock("@/lib/voice/transcribeAudio", () => ({ transcribeAudio: vi.fn() }));
 
 vi.mock("@/lib/simulation/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/simulation/api")>("@/lib/simulation/api");
@@ -48,7 +52,8 @@ vi.mock("@/lib/simulation/api", async () => {
 });
 
 import { SimulationClient } from "./SimulationClient";
-import { fetchNextPatient } from "@/lib/simulation/api";
+import { fetchNextPatient, postTurn } from "@/lib/simulation/api";
+import { transcribeAudio } from "@/lib/voice/transcribeAudio";
 
 function makeSession() {
   return {
@@ -73,6 +78,7 @@ describe("SimulationClient — Wygeneruj pacjenta", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    startRecording.mockReset();
   });
 
   it("opens a dialog when Wygeneruj pacjenta is clicked and the input is not in the header", async () => {
@@ -154,5 +160,19 @@ describe("SimulationClient — Wygeneruj pacjenta", () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 50));
     });
+  });
+
+  it("adds microphone transcription to the draft without sending a turn", async () => {
+    vi.mocked(transcribeAudio).mockResolvedValueOnce({ text: "Czy ból promieniuje?" });
+    vi.mocked(postTurn).mockClear();
+    render(<SimulationClient />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Następny pacjent" })); });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mikrofon" }));
+    const onBlob = startRecording.mock.calls[0]?.[0] as (blob: Blob) => void;
+    await act(async () => { onBlob(new Blob(["audio"])); });
+
+    expect((screen.getByRole("textbox", { name: "Wiadomość" }) as HTMLInputElement).value).toBe("Czy ból promieniuje?");
+    expect(postTurn).not.toHaveBeenCalled();
   });
 });

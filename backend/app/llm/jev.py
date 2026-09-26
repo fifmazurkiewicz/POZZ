@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 
 from app.settings import get_settings
-
-
-class VoiceTurnDecisionError(Exception):
-    """JEV did not return a reliable utterance-boundary decision."""
 
 
 def training_signals(evaluation: str) -> dict[str, Any] | None:
@@ -29,31 +25,3 @@ def training_signals(evaluation: str) -> dict[str, Any] | None:
         except (httpx.HTTPError, ValueError, TypeError):
             return None
     return None
-
-
-def voice_turn_decision(transcript: str) -> Literal["complete", "continue"]:
-    """Return only a strict, non-clinical turn-boundary decision."""
-    key = get_settings().openrouter_api_key
-    if not key:
-        raise VoiceTurnDecisionError()
-    payload = {
-        "model": "typesafe/jev-1.13",
-        "state": {"transcript": transcript},
-        "questions": {
-            "voice_turn_complete": {
-                "type": "noul",
-                "instructions": "Is this Polish speaker utterance complete? Answer yes only if the speaker has clearly finished; answer no if it is incomplete.",
-            }
-        },
-    }
-    try:
-        response = httpx.post("https://openrouter.ai/api/alpha/decisions", headers={"Authorization": f"Bearer {key}"}, json=payload, timeout=5)
-        response.raise_for_status()
-        value = response.json().get("answers", {}).get("voice_turn_complete", {}).get("noul")
-    except (httpx.HTTPError, ValueError, TypeError, AttributeError) as exc:
-        raise VoiceTurnDecisionError() from exc
-    if isinstance(value, (int, float)) and value >= 0.8:
-        return "complete"
-    if isinstance(value, (int, float)) and value <= 0.2:
-        return "continue"
-    raise VoiceTurnDecisionError()

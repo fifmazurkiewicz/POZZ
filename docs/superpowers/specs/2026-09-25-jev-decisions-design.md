@@ -29,4 +29,4 @@ Use mocked Decisions API fixtures to test complete, uncertain, and unavailable o
 
 ## Non-goals
 
-Jev does not diagnose, triage, prescribe, select investigations, evaluate real patients for clinical use, or replace the existing LLM evaluation. The sole runtime exception is the non-clinical `voice_turn_complete` boundary check specified in [`2026-09-26-jev-voice-turns-design.md`](2026-09-26-jev-voice-turns-design.md); its failure rejects the transient voice turn rather than changing clinical content.
+Jev does not diagnose, triage, prescribe, select investigations, evaluate real patients for clinical use, replace the existing LLM evaluation, or determine a voice-turn boundary.
