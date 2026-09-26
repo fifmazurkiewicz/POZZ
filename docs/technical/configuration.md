@@ -18,7 +18,7 @@ Placeholders only. Copy `.env.example` → `.env` and `frontend/.env.example` �
 | `ALLOWED_ADMIN_EMAILS` | Comma-separated admin allowlist. |
 | `TEXT_PROVIDER` | Text LLM adapter (`openrouter`). |
 | `TEXT_MODEL` | OpenRouter slug (default `google/gemini-2.5-flash-lite`). |
-| `OPENROUTER_API_KEY` | OpenRouter. |
+| `OPENROUTER_API_KEY` | OpenRouter, w tym niekliniczna kontrola końca wypowiedzi JEV w trybie Rozmowa. |
 | `VOICE_MODE` | Server capability flag (`speech_to_speech` or `chained`). It does not make Live functional without a browser client/socket; the current UI uses chained TTS. |
 | `GOOGLE_API_KEY` | Reserved for the planned Gemini Live integration / Google. |
 | `STT_PROVIDER` | `groq` (default). |

@@ -1,5 +1,6 @@
 import { apiUrl } from "../api";
 import { readVoiceId } from "./voicePreference";
+import { checkVoiceTurn } from "./checkVoiceTurn";
 
 type VoiceControllerCallbacks = {
   onSpeakingChange: (speaking: boolean) => void;
@@ -25,6 +26,9 @@ export class VoiceController {
   private chunks: Blob[] = [];
   private recordingDone: ((blob: Blob) => void) | null = null;
   private submitRecording = false;
+  private conversationTimer: ReturnType<typeof setTimeout> | null = null;
+  private conversationText: string[] = [];
+  private conversationStartedAt = 0;
 
   constructor(private readonly callbacks: VoiceControllerCallbacks) {}
 
@@ -93,8 +97,13 @@ export class VoiceController {
     }
   }
 
-  async startRecording(onBlob: (blob: Blob) => void): Promise<void> {
-    this.stop();
+  async startRecording(onBlob: (blob: Blob) => void, preserveConversation = false): Promise<void> {
+    if (preserveConversation) {
+      if (this.conversationTimer) clearTimeout(this.conversationTimer);
+      this.conversationTimer = null;
+    } else {
+      this.stop();
+    }
     if (this.disposed) return;
     const operation = this.operation;
     const mediaDevices = globalThis.navigator?.mediaDevices;
@@ -144,9 +153,45 @@ export class VoiceController {
     if (this.recorder.state !== "inactive") this.recorder.stop();
   }
 
+  async startConversationTurn(token: string, onComplete: (text: string) => void): Promise<void> {
+    this.stop();
+    this.conversationText = [];
+    this.conversationStartedAt = Date.now();
+    await this.captureConversationSegment(token, onComplete, 2_500);
+  }
+
+  stopConversationTurn(): void { this.stop(); }
+
+  private async captureConversationSegment(token: string, onComplete: (text: string) => void, duration: number): Promise<void> {
+    await this.startRecording((blob) => {
+      void checkVoiceTurn(blob, token).then((result) => {
+        this.conversationText.push(result.text);
+        if (result.decision === "complete") {
+          const text = this.conversationText.join(" ").trim();
+          this.conversationText = [];
+          onComplete(text);
+          return;
+        }
+        if (Date.now() - this.conversationStartedAt >= 15_000) {
+          this.error("Wypowiedź trwała zbyt długo. Powiedz ją ponownie.");
+          this.stop();
+          return;
+        }
+        void this.captureConversationSegment(token, onComplete, 1_000);
+      }).catch((error) => {
+        this.error(error instanceof Error ? error.message : "Nie udało się rozpoznać końca wypowiedzi. Powiedz ją ponownie.");
+        this.stop();
+      });
+    }, true);
+    this.conversationTimer = setTimeout(() => this.finishRecording(), duration);
+  }
+
   stop(): void {
     this.operation += 1;
     this.abortController?.abort();
+    if (this.conversationTimer) clearTimeout(this.conversationTimer);
+    this.conversationTimer = null;
+    this.conversationText = [];
     this.abortController = null;
     this.cleanupPlayback();
     const wasRecording = this.recorder !== null || this.stream !== null;

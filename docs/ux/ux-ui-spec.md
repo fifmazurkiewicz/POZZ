@@ -10,7 +10,7 @@ Copy produktu jest **po polsku** (preserve). To nie jest aplikacja medyczna — 
 - **Wywiad** — nagranie jednego ujęcia (Start → Stop → przetwarzanie) **oraz** ręczny konstruktor linii Lekarz/Pacjent → podsumowanie i zalecenia. Ręczny konstruktor ma **przycisk mikrofonu** (STT) obok pola tekstowego — dyktowanie zamiast pisania. Bez TTS pacjenta, bez lampy Live. ADR: [`../technical/decisions/2026-09-13-interview-voice-input.md`](../technical/decisions/2026-09-13-interview-voice-input.md). **Formularz tworzenia przypadku** (tytuł + opis pacjenta) ma też mikrofony przy obu polach — dictation przed "Rozpocznij wywiad".
 - **Menu → Sesje** — lista własnych wywiadów (symulacja / nagrany / ręczny) + szczegół.
 - Google OAuth, bramka akceptacji, Admin (cap, kolejka Accept, masowe generowanie pacjentów).
-- **Głos w Symulacji:** obecnie chained STT + TTS. Wybór trybu jest w Menu; Live jest pokazany jako niedostępny do czasu implementacji klienta Gemini Live. Transkrypt + composer są zawsze widoczne. Spec: [`../superpowers/specs/2026-09-11-interview-controls-design.md`](../superpowers/specs/2026-09-11-interview-controls-design.md).
+- **Głos w Symulacji:** chained STT + TTS. Composer ma przełącznik **Wiadomości / Rozmowa**. W Rozmowie JEV sprawdza niekliniczną granicę wypowiedzi po 2,5 s, a następnie co 1 s do 15 s; błąd prosi o powtórzenie i nic nie zapisuje. Transkrypt + composer są zawsze widoczne i historia automatycznie podąża za nową turą, dopóki użytkownik nie przewinie jej ręcznie. Spec: [`../superpowers/specs/2026-09-26-jev-voice-turns-design.md`](../superpowers/specs/2026-09-26-jev-voice-turns-design.md).
 
 **Poza MVP (Etap 2):** podpowiedzi co 10 s podczas nagrania, diarization GPU, wipe bazy w UI, resume tej samej `conversation_id`.
 

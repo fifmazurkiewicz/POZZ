@@ -29,16 +29,20 @@ export function SimulationClient() {
   const [keywords, setKeywords] = useState("");
   const [keywordsOpen, setKeywordsOpen] = useState(false);
   const keywordsDialog = useRef<HTMLDialogElement>(null);
+  const transcriptRef = useRef<HTMLElement>(null);
+  const transcriptAtBottom = useRef(true);
+  const [newerBelow, setNewerBelow] = useState(false);
   const keywordsFieldId = useId();
   const keywordsTitleId = useId();
   const keywordsHintId = useId();
   const [patientVoice, setPatientVoice] = useState(true);
+  const [inputMode, setInputMode] = useState<"messages" | "conversation">("messages");
   const patientVoiceRef = useRef(true);
   const { busy, error, cancelled, run, cancel } = useAbortableAction();
   const voice = useVoiceController();
   const stopVoice = voice.stop;
   const bearer = useCallback(async () => token ?? await getAccessToken(), [token, getAccessToken]);
-  const stop = useCallback(() => { cancel(); stopVoice(); }, [cancel, stopVoice]);
+  const stop = useCallback(() => { cancel(); stopVoice(); setInputMode("messages"); }, [cancel, stopVoice]);
 
   useEffect(() => {
     if (keywordsOpen) keywordsDialog.current?.showModal();
@@ -56,6 +60,20 @@ export function SimulationClient() {
       return fetchConversation(access, id, signal);
     }, (saved) => { setSession(saved); setMode(saved.mode); setCardOpen(true); });
   }, [bearer, run, searchParams, stopVoice]);
+
+  useEffect(() => {
+    const transcript = transcriptRef.current;
+    if (!transcript || !transcriptAtBottom.current) return;
+    transcript.scrollTop = transcript.scrollHeight;
+    setNewerBelow(false);
+  }, [session?.messages?.length]);
+
+  function onTranscriptScroll() {
+    const transcript = transcriptRef.current;
+    if (!transcript) return;
+    transcriptAtBottom.current = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 24;
+    setNewerBelow(!transcriptAtBottom.current);
+  }
 
   function nextPatient() {
     stop();
@@ -122,7 +140,7 @@ export function SimulationClient() {
     {session && !session.ended_at ? <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--color-divider)] px-3 py-1">
       {MODES.map((item) => <button key={item.id} type="button" disabled={busy} className={`classical-btn shrink-0 px-3 text-sm ${mode === item.id ? "classical-btn-primary" : ""}`} aria-pressed={mode === item.id} onClick={() => { stop(); setMode(item.id); }}>{item.label}</button>)}
     </div> : null}
-    <section className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 text-sm" aria-label="Rozmowa">
+    <section ref={transcriptRef} onScroll={onTranscriptScroll} className="simulation-transcript min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 text-sm" aria-label="Rozmowa" tabIndex={0}>
       {!session ? <p className="text-[var(--color-soft)]">Najpierw wygeneruj pacjenta, aby móc rozpocząć wywiad.</p> : <>
         <button type="button" className="mb-3 min-h-11 w-full text-left font-semibold" onClick={() => setCardOpen((open) => !open)} aria-expanded={cardOpen}>Karta pacjenta {cardOpen ? "▾" : "▸"}</button>
         {cardOpen ? <dl className="classical-card mb-4 space-y-1 p-3">{cardRowsForDisplay(session.card).map((row) => <div key={row.label} className="flex justify-between gap-3"><dt className="text-[var(--color-soft)]">{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : null}
@@ -130,6 +148,7 @@ export function SimulationClient() {
         <InterviewEvaluation session={session} />
       </>}
     </section>
+    {newerBelow ? <button type="button" className="classical-btn mx-3 mb-2 self-end text-sm" onClick={() => { const transcript = transcriptRef.current; if (transcript) { transcript.scrollTop = transcript.scrollHeight; transcriptAtBottom.current = true; setNewerBelow(false); } }}>Przejdź do najnowszej wiadomości</button> : null}
     {error || voice.error ? <p className="shrink-0 px-3 py-2 text-sm" role="alert">{error || voice.error}</p> : null}
     {session ? <InterviewActions key={session.conversation_id} session={session} active={active} busy={busy} error={error} cancelled={cancelled} getToken={bearer} onStop={stop} onUpdate={setSession} run={run} /> : busy ? <button className="classical-btn m-3" type="button" onClick={stop}>Zatrzymaj</button> : null}
     <dialog
@@ -165,6 +184,6 @@ export function SimulationClient() {
         </div>
       </form>
     </dialog>
-    <ConversationComposer draft={draft} onDraftChange={setDraft} onSend={(event) => { event.preventDefault(); submitTurn(draft.trim()); }} disabled={busy || !session || !!session.ended_at} placeholder={session?.ended_at ? "Wywiad zakończony" : composerPlaceholder(mode)} patientVoice={patientVoice} speaking={voice.speaking} listening={voice.listening} onVoiceChange={(enabled) => { patientVoiceRef.current = enabled; setPatientVoice(enabled); if (!enabled) stopVoice(); }} onListeningChange={(enabled) => { if (enabled) void voice.startRecording((blob) => submitTurn("", blob)); else voice.finishRecording(); }} />
+    <ConversationComposer draft={draft} onDraftChange={setDraft} onSend={(event) => { event.preventDefault(); submitTurn(draft.trim()); }} disabled={busy || !session || !!session.ended_at} placeholder={session?.ended_at ? "Wywiad zakończony" : composerPlaceholder(mode)} patientVoice={patientVoice} speaking={voice.speaking} listening={voice.listening} onVoiceChange={(enabled) => { patientVoiceRef.current = enabled; setPatientVoice(enabled); if (!enabled) stopVoice(); }} onListeningChange={(enabled) => { if (enabled) void voice.startRecording((blob) => submitTurn("", blob)); else voice.finishRecording(); }} inputMode={inputMode} onInputModeChange={(next) => { if (next === "messages") voice.stopConversationTurn(); setInputMode(next); }} onConversationStart={() => void bearer().then((access) => { if (access) void voice.startConversationTurn(access, submitTurn); })} onConversationStop={() => voice.stopConversationTurn()} />
   </main>;
 }
