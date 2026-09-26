@@ -29,6 +29,9 @@ export class VoiceController {
   private conversationTimer: ReturnType<typeof setTimeout> | null = null;
   private conversationText: string[] = [];
   private conversationStartedAt = 0;
+  private audioContext: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private silenceMonitor: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly callbacks: VoiceControllerCallbacks) {}
 
@@ -157,12 +160,12 @@ export class VoiceController {
     this.stop();
     this.conversationText = [];
     this.conversationStartedAt = Date.now();
-    await this.captureConversationSegment(token, onComplete, 2_500);
+    await this.captureConversationSegment(token, onComplete);
   }
 
   stopConversationTurn(): void { this.stop(); }
 
-  private async captureConversationSegment(token: string, onComplete: (text: string) => void, duration: number): Promise<void> {
+  private async captureConversationSegment(token: string, onComplete: (text: string) => void): Promise<void> {
     await this.startRecording((blob) => {
       void checkVoiceTurn(blob, token).then((result) => {
         this.conversationText.push(result.text);
@@ -177,13 +180,43 @@ export class VoiceController {
           this.stop();
           return;
         }
-        void this.captureConversationSegment(token, onComplete, 1_000);
+        void this.captureConversationSegment(token, onComplete);
       }).catch((error) => {
         this.error(error instanceof Error ? error.message : "Nie udało się rozpoznać końca wypowiedzi. Powiedz ją ponownie.");
         this.stop();
       });
     }, true);
-    this.conversationTimer = setTimeout(() => this.finishRecording(), duration);
+    this.watchForSilence();
+  }
+
+  private watchForSilence(): void {
+    const stream = this.stream;
+    const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!stream || !AudioContextClass) {
+      this.error("Ta przeglądarka nie obsługuje wykrywania ciszy w rozmowie.");
+      this.stop();
+      return;
+    }
+    this.audioContext = new AudioContextClass();
+    const source = this.audioContext.createMediaStreamSource(stream);
+    this.analyser = this.audioContext.createAnalyser();
+    this.analyser.fftSize = 512;
+    source.connect(this.analyser);
+    const samples = new Uint8Array(this.analyser.fftSize);
+    let lastSpeech = Date.now();
+    const observe = () => {
+      if (!this.analyser || !this.recorder) return;
+      this.analyser.getByteTimeDomainData(samples);
+      let total = 0;
+      for (const sample of samples) total += Math.abs(sample - 128);
+      if (total / samples.length > 2) lastSpeech = Date.now();
+      if (Date.now() - lastSpeech >= 1_500) {
+        this.finishRecording();
+        return;
+      }
+      this.silenceMonitor = setTimeout(observe, 100);
+    };
+    observe();
   }
 
   stop(): void {
@@ -191,6 +224,11 @@ export class VoiceController {
     this.abortController?.abort();
     if (this.conversationTimer) clearTimeout(this.conversationTimer);
     this.conversationTimer = null;
+    if (this.silenceMonitor) clearTimeout(this.silenceMonitor);
+    this.silenceMonitor = null;
+    void this.audioContext?.close();
+    this.audioContext = null;
+    this.analyser = null;
     this.conversationText = [];
     this.abortController = null;
     this.cleanupPlayback();

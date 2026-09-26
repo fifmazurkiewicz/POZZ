@@ -4,9 +4,9 @@
 
 Add an optional **Rozmowa** mode to Simulation. It turns a spoken doctor
 utterance into one ordinary simulation turn without a separate Send action.
-After an initial 2.5 seconds of captured speech, JEV determines whether the
-transcribed utterance is complete. A `continue` result captures another second
-and repeats the check. The maximum capture duration is 15 seconds.
+After 1.5 seconds of detected microphone silence, JEV determines whether the
+transcribed utterance is complete. A `continue` result resumes listening until
+the next 1.5-second silence. The maximum capture duration is 15 seconds.
 
 The feature is a conversation-boundary detector only. It makes no clinical,
 diagnostic, triage, treatment, or training-evaluation decision.

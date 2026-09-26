@@ -49,11 +49,11 @@ def voice_turn_decision(transcript: str) -> Literal["complete", "continue"]:
     try:
         response = httpx.post("https://openrouter.ai/api/alpha/decisions", headers={"Authorization": f"Bearer {key}"}, json=payload, timeout=5)
         response.raise_for_status()
-        value = response.json().get("answers", {}).get("voice_turn_complete", {}).get("value")
+        value = response.json().get("answers", {}).get("voice_turn_complete", {}).get("noul")
     except (httpx.HTTPError, ValueError, TypeError, AttributeError) as exc:
         raise VoiceTurnDecisionError() from exc
-    if value is True:
+    if isinstance(value, (int, float)) and value >= 0.8:
         return "complete"
-    if value is False:
+    if isinstance(value, (int, float)) and value <= 0.2:
         return "continue"
     raise VoiceTurnDecisionError()
