@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.auth.tokens import DEV_TOKEN, decode_access_token
 from app.db import get_db
 from app.models import User
+from app.infrastructure.resend_mail import notify_pending_account
 from app.settings import get_settings
 
 security = HTTPBearer(auto_error=False)
@@ -55,11 +56,20 @@ def get_current_user(
             display_name=display_name,
             is_admin=is_admin,
             is_approved=is_admin,
+            approval_notification_status="sent" if is_admin else "pending",
             spend_cap_usd=10,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
+        if not is_admin:
+            try:
+                notify_pending_account(email)
+                user.approval_notification_status = "sent"
+            except Exception as exc:
+                user.approval_notification_status = "failed"
+                user.approval_notification_error = str(exc)[:500]
+            db.commit()
     elif settings.dev_auth_allowed and creds.credentials == DEV_TOKEN and not user.is_admin:
         user.is_admin = True
         db.commit()

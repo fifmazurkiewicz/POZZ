@@ -31,6 +31,7 @@ function PendingApprovalScreen() {
         <p className="text-sm text-[var(--color-soft)]">
           Administrator musi zaakceptować to konto, zanim będzie można korzystać z POZZ.
         </p>
+        <a className="text-sm underline" href="mailto:fifmazurkiewicz@gmail.com?subject=POZZ%20-%20pro%C5%9Bba%20o%20akceptacj%C4%99%20konta">Napisz do administratora</a>
         <div className="flex flex-col gap-2">
           <button type="button" className="classical-btn classical-btn-primary" onClick={() => void refreshProfile()}>
             Sprawdź status
