@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {"title": "POZZ — Current System Architecture", "output": "docs/architecture/current.architecture.html", "quality_profile": "showcase", "repository": {"url": "https://github.com/fifmazurkiewicz/POZZ.git", "revision": "3b7fcca5499e942decdbc250095308f0478e01ef", "link_mode": "local-only"}},
+  "components": [
+    {"id": "clinician", "type": "external", "label": "Clinician", "sublabel": "browser and PWA", "pos": [40, 300], "size": [140, 60], "sources": [{"path": "README.md", "line": 1, "end_line": 12, "label": "product"}]},
+    {"id": "frontend", "type": "cloud", "label": "Frontend PWA", "sublabel": "Vercel", "pos": [240, 300], "size": [140, 60], "sources": [{"path": "README.md", "line": 10, "end_line": 12, "label": "stack"}]},
+    {"id": "api", "type": "backend", "label": "POZZ API", "sublabel": "FastAPI /api", "pos": [530, 300], "size": [140, 60], "sources": [{"path": "backend/app/main.py", "line": 1, "end_line": 68, "label": "entry"}, {"path": "backend/app/api/router.py", "line": 1, "end_line": 24, "label": "routes"}]},
+    {"id": "supabase", "type": "database", "label": "Supabase", "sublabel": "Postgres, Auth, RLS", "pos": [820, 300], "size": [160, 60], "sources": [{"path": "README.md", "line": 10, "end_line": 12, "label": "persistence"}]},
+    {"id": "ai", "type": "cloud", "label": "AI Providers", "sublabel": "OpenRouter and STT", "pos": [530, 130], "size": [165, 60], "sources": [{"path": "docs/technical/decisions/README.md", "line": 5, "end_line": 25, "label": "providers"}]},
+    {"id": "recording", "type": "cloud", "label": "Interview Recording", "sublabel": "temporary upload and diarization", "pos": [820, 130], "size": [190, 60], "sources": [{"path": "diarization_test/README.md", "line": 1, "end_line": 20, "label": "research"}]}
+  ],
+  "connections": [
+    {"from": "clinician", "to": "frontend", "label": "HTTPS", "variant": "emphasis"}, {"from": "frontend", "to": "api", "label": "simulation and interview API"}, {"from": "api", "to": "supabase", "label": "user-scoped records"}, {"from": "api", "to": "ai", "label": "generation and transcription", "fromSide": "top", "toSide": "bottom"}, {"from": "api", "to": "recording", "label": "audio processing", "variant": "dashed", "fromSide": "top", "toSide": "bottom"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "ea25a452-7d97-4c14-b83c-13147b072467",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/Filip/dev/POZZ/docs/architecture/current.architecture.json",
+  "output": "/Users/Filip/dev/POZZ/docs/architecture/current.architecture.html",
+  "specification": {
+    "sha256": "b385b4354a6333913710152fe6af01fa5ad217a9869ff4618d08e04898bd80fa",
+    "bytes": 2326
+  },
+  "artifact": {
+    "sha256": "b741395895f2e434c0c814020717f845613a2a208e5f93705660fb79eac591a0",
+    "bytes": 753107
+  }
+}
