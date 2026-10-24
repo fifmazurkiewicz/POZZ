@@ -45,16 +45,16 @@ Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empt
 
 ## Graft + Superpowers
 
-- **Superpowers:** process skills before action (global `superpowers.mdc`). Creative work → brainstorming → writing-plans.
-- **Graft:** before broad exploration `npx -y @nanonets/graft map` / `graft ask "…" --source` (or MCP). Cache in `/graft/` (gitignored — never commit). Wiring: `.cursor/rules/graft.mdc`, `.cursor/mcp.json`. Native global install may need VS C++ build tools; `npx` is enough. Rebuild with `npx -y @nanonets/graft build` when `graft check` reports no graph.
-- **Taste:** skill `design-taste-frontend` (global, not in git). Overlay `.cursor/rules/taste-skill-dials.mdc` — VARIANCE 3 / MOTION 2 / DENSITY 6 (clinical / trust-first).
+- **Superpowers:** process skills before action (`using-superpowers` skill). Creative work → brainstorming → writing-plans.
+- **Graft:** before broad exploration `npx -y @nanonets/graft map` / `graft ask "…" --source` (or MCP). Cache in `/graft/` (gitignored — never commit). Wiring: `.cursor/mcp.json`, `.codex/config.toml`, `.mcp.json` (agent-toolkit). Run `npx -y @nanonets/graft check` at the start of work and `npx -y @nanonets/graft build` when it reports no graph or drift.
+- **Taste:** skill `design-taste-frontend` (global, not in git). Dials: VARIANCE 3 / MOTION 2 / DENSITY 6 (clinical / trust-first).
 - **Language:** user may write Polish; agent replies and new code in English (`language.mdc`). Product UI already in Polish is preserve.
 
 ## Learned User Preferences
 
-- Keep Superpowers mandatory; Graft and Superpowers belong in global Cursor rules; greenfield FastAPI + Next.js — Streamlit is reference only; no feature code until scaffold + relevant plan Task 0 pass.
+- Keep Superpowers mandatory; Graft and Superpowers come from agent-toolkit; greenfield FastAPI + Next.js — Streamlit is reference only; no feature code until scaffold + relevant plan Task 0 pass.
 - Product UI language is always Polish. Agent chat, identifiers, commits, and docs the agent writes are English.
-- Stack must match `deployment-standard.mdc`: Vercel + Render + Supabase. Do not reintroduce AWS EC2, Secrets Manager, or cloudflared quick tunnels as the production path.
+- Stack must match the Deployment default in Shared defaults: Vercel + Render + Supabase. Do not reintroduce AWS EC2, Secrets Manager, or cloudflared quick tunnels as the production path.
 - Native language of doctors using the app is Polish; simulated patients speak Polish; LLM prompts force Polish output.
 - Chat always has a text input. Simulation lamp: ON = Gemini Live, OFF = chained STT + patient TTS. Mute Listening while the patient speaks. Spec: `docs/superpowers/specs/2026-09-08-simulation-live-tts-lamp-design.md`.
 - Next work after scaffold: schema + auth → text simulation → chained voice → Live → evaluation → Interview tab → admin. SoT: `docs/superpowers/specs/2026-09-08-refactor-build-order-design.md`.
@@ -83,9 +83,19 @@ Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empt
 - Hidden scenario gold (full HPI, traps, treatment plan) is never shown until after End interview evaluation.
 - Privacy: `GET /api/privacy/export` + `DELETE /api/privacy/content` (typed confirmation `USUŃ MOJE DANE`); UI at `/menu/privacy`, informational page `/privacy`. Content erase keeps the auth account.
 - `diarization_test/` is experimental Gradio work — out of MVP deploy.
-- Graft `/graft/` remains gitignored. Native `graft build` may fail without tree-sitter build tools; MCP + rule wiring is enough until then.
+- Graft `/graft/` remains gitignored. The MCP server exposes no tools until `npx -y @nanonets/graft build` has indexed the repo.
 - Wywiad "Nagranie" tab is a live recorder (mic → in-memory `Blob` → `POST /api/interviews/recordings`); no file upload, no durable audio. Implementation: `frontend/src/components/interview/RecordedRecorder.tsx`. Same backend endpoint as the legacy upload form — STT + speaker diarization.
 - Wywiad "Opis i plan" card (after generation) has an "Ukryj opis" / "Pokaż opis" toggle; collapse state is in-memory only (no localStorage). Sim header has both "Następny pacjent" (random catalog) and "Wygeneruj pacjenta" with a keyword input — non-empty keywords generate a private patient on `POST /api/patients/next`. Escape clears the keyword input.
+
+## Shared defaults
+
+These defaults come from the shared project template. Sections above override them where they document a project-specific choice.
+
+- **Deployment:** web products use Vercel for the frontend, Render for the backend, and Supabase for database and auth. Keep local development usable without a production deployment or mandatory Docker. Add new variables to `.env.example` and the setup docs, and keep durable state off ephemeral runtime disks.
+- **Secrets:** never read, edit, create, display, or commit real `.env*` files, credentials, tokens, keys, or passwords. Use `.env.example` for variable names only. If a secret is needed, ask the user to set it locally; never request it in chat. If one is exposed, do not repeat it and recommend rotation.
+- **Personal data:** collect, store, log, and expose only what the feature requires. Follow GDPR purpose limitation, retention and deletion, export, and access control.
+- **UI:** use 44px touch targets where relevant and a calm product baseline of VARIANCE 3, MOTION 2, DENSITY 6 with `design-taste-frontend`; reserve landing-page visual language for marketing surfaces. Do not replace the styling stack or introduce a competing design system without approval.
+- **Graft:** keep `graft/` git-ignored and never deep-index secrets. Run `graft build --deep` only with explicit approval.
 
 <!-- agent-toolkit:standard v1 start -->
 # Agent standard v2
@@ -93,7 +103,7 @@ Local dev without Supabase (after scaffold): leave `NEXT_PUBLIC_SUPABASE_*` empt
 - Read `AGENTS.md`, applicable nested instructions, and relevant project documentation before changing code. More specific project instructions win, but never waive safety or required verification.
 - Use a skill when its `description` matches the task. Select only relevant skills, read the selected `SKILL.md` first, and state when a required skill is unavailable.
 - Scale planning to risk. For meaningful features, behavior, API, deployment, or architecture changes, record the decision, trade-offs, and durable documentation. Small fixes do not need a new plan, but must not leave known documentation drift.
-- Graft is the shared code-map MCP. Before broad source exploration, use it for orientation or impact analysis. If its runtime is unavailable, use focused `rg` queries and report that limitation; never install tools or assume a particular runtime.
+- Graft is the shared code-map MCP. At the start of work in a project, run `npx -y @nanonets/graft check`; when it reports no graph or drift, run `npx -y @nanonets/graft build`, a local structural index with no LLM or key, which keeps `graft/` git-ignored. Run `graft build --deep` only with explicit approval, because it calls a paid LLM. Before broad source exploration, use Graft for orientation or impact analysis. If its runtime is unavailable, use focused `rg` queries and report that limitation; never install tools or assume a particular runtime.
 - For a meaningful change using the project-context lifecycle, keep change-local state under `.agent/context/changes/<change-id>/`, use its `progress.md` as the canonical execution record, and use Graft for durable knowledge. Do not create a parallel `lessons.md` store.
 - For every non-informational review finding, keep a canonical disposition in `reviews/review-decisions.md` and update its derived Kanban view only afterward. A `Skip` requires explicit human-owner acceptance, rationale, and a re-evaluation trigger; reusable evidence-backed lessons go to Graft after archive.
 - After code changes, use `implementation-review` before archive or merge. Use a fresh reviewer agent when available; otherwise perform an explicit second pass and disclose that it was not independent. Review with the current AI session and existing repository tools, without requiring another service, account, or installation; report verification gaps honestly.
