@@ -3,7 +3,7 @@ title = "POZZ"
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 description = "Env templates and empty KEY= placeholders — not live secrets"
 paths = [
   '''(^|/)\.env\.example$''',
