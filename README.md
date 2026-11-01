@@ -22,3 +22,7 @@ cp .env.example .env   # DATABASE_URL, OPENROUTER_API_KEY, optional GROQ_API_KEY
 uv sync
 uv run streamlit run app.py --server.port 8501
 ```
+
+## Error monitoring
+
+[Sentry tasks, privacy contract and deployment variables](docs/technical/sentry.md). SDK source verification and production activation are tracked separately.

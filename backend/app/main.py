@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.api.router import api_router
+from app.monitoring import capture_error, init_sentry
 from app.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ def _error_response(request: Request, exc: Exception) -> JSONResponse:
     so existing structured codes (`spend_cap_exceeded`, `conversation_completed`)
     continue to flow through unchanged.
     """
+    capture_error(exc)
     if isinstance(exc, httpx.HTTPError):
         status_code = status.HTTP_502_BAD_GATEWAY
         error_code, error_message = _provider_error_detail(exc)
@@ -74,6 +76,8 @@ def _error_response(request: Request, exc: Exception) -> JSONResponse:
         content={"detail": {"code": error_code, "message": error_message}},
     )
 
+
+init_sentry("pozz-api", api=True)
 
 app = FastAPI(title="POZZ API", version="0.1.0")
 # Middleware added later is outermost. CORS must wrap the error translator so
