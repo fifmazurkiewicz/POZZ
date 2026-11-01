@@ -9,7 +9,7 @@ gradio>=4.0.0
 numpy>=1.24.0
 python-dotenv>=1.0.0
 requests>=2.31.0
-soundfile>=0.12.0
+soundfile>=0.14.0
 
 # Audio streaming (opcjonalne, ale zalecane)
 sounddevice>=0.4.6
